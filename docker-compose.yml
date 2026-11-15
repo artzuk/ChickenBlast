@@ -1,0 +1,21 @@
+# Portainer stack: Stacks -> Add stack -> Repository, compose path: docker-compose.yml
+# Portainer builds the image itself (no registry).
+#
+# No host port is published. The container joins Nginx Proxy Manager's network; in NPM create a
+# proxy host  chickenblast.dik-software.de  ->  http://chickenblast:80  (SSL via Let's Encrypt).
+services:
+  chickenblast:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # always build locally, never try to pull from a registry
+    # ("Pull and redeploy" in Portainer runs `compose pull` first)
+    pull_policy: build
+    container_name: chickenblast
+    restart: unless-stopped
+    networks:
+      - nginx-proxy-manager_default
+
+networks:
+  nginx-proxy-manager_default:
+    external: true
