@@ -756,7 +756,7 @@ function cycleWeapon(d) {
 }
 
 function triggerDown(px, py) {
-  if (G.state !== 'play') { pointShot(px, py, false); return; }
+  if (G.state !== 'play') return;
   if (G.switchT > 0) return;
   if (G.weapon === 'laser') { startLaser(); return; }
   if (G.reload > 0 || G.cool > 0) return;
@@ -1410,6 +1410,7 @@ function render() {
   else if (G.state === 'menu') drawMenu();
   else if (G.state === 'worlds') drawWorlds();
   else if (G.state === 'album') drawAlbum();
+  else if (G.state === 'help') drawHelp();
   else if (G.state === 'over') { drawHUD(); drawOver(); }
   if (G.paused) {
     buttons = [];
@@ -1418,6 +1419,7 @@ function render() {
     button('WEITER', W / 2 - 290, H / 2 - 20, 270, 72, () => { G.paused = false; });
     button('MENÜ', W / 2 + 20, H / 2 - 20, 270, 72, () => { G.paused = false; G.state = 'menu'; }, '#ffe9a8');
     if (!mouse.touch) txt('P / ESC = weiter', W / 2, H / 2 + 110, 22, '#fff');
+    soundButton(W - 56, 130);
   }
   if (isPortrait()) {
     buttons = [];
@@ -1565,31 +1567,89 @@ function drawTitle(y) {
   }
 }
 
+function toggleSound() {
+  Settings.sound = !Settings.sound; store.set('sound', Settings.sound);
+  if (!Settings.sound) Snd.laserOff();
+}
+// runder Icon-Knopf mit Lautsprecher
+function soundButton(x, y) {
+  const r = 30, hover = !mouse.touch && (mouse.x - x) ** 2 + (mouse.y - y) ** 2 < r * r;
+  ctx.fillStyle = 'rgba(40,15,0,0.55)'; circ(ctx, x + 3, y + 4, r); ctx.fill();
+  ctx.fillStyle = hover ? '#fff3b0' : '#b3e0ff'; circ(ctx, x, y, r); ctx.fill();
+  ctx.strokeStyle = '#3b1600'; ctx.lineWidth = 4; ctx.stroke();
+  ctx.fillStyle = '#3b1600';
+  ctx.beginPath(); ctx.moveTo(x - 16, y - 6); ctx.lineTo(x - 8, y - 6); ctx.lineTo(x + 2, y - 15); ctx.lineTo(x + 2, y + 15); ctx.lineTo(x - 8, y + 6); ctx.lineTo(x - 16, y + 6); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#3b1600'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  if (Settings.sound) {
+    ctx.beginPath(); ctx.arc(x + 4, y, 8, -0.8, 0.8); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + 4, y, 15, -0.8, 0.8); ctx.stroke();
+  } else {
+    ctx.strokeStyle = '#c1121f';
+    ctx.beginPath(); ctx.moveTo(x + 7, y - 8); ctx.lineTo(x + 19, y + 8); ctx.moveTo(x + 19, y - 8); ctx.lineTo(x + 7, y + 8); ctx.stroke();
+  }
+  buttons.push({ x: x - r - 6, y: y - r - 6, w: 2 * r + 12, h: 2 * r + 12, act: toggleSound });
+}
+// zweite Knopf-Art: dezent, nur Umriss
+function ghostButton(label, x, y, w, h, act) {
+  const hover = !mouse.touch && mouse.x > x && mouse.x < x + w && mouse.y > y && mouse.y < y + h;
+  ctx.fillStyle = hover ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.25)'; rrect(ctx, x, y, w, h, 12); ctx.fill();
+  ctx.strokeStyle = '#fff8e0'; ctx.lineWidth = 3; ctx.stroke();
+  txt(label, x + w / 2, y + h / 2 + 1, Math.min(24, h * 0.5), '#fff8e0', 'center', null);
+  buttons.push({ x, y, w, h, act });
+}
 function drawMenu() {
   ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, 0, W, H);
-  drawTitle(130);
-  buttons.push({ x: W / 2 - 420, y: 80, w: 840, h: 100, act: titleTap, silent: true });
+  drawTitle(150);
+  buttons.push({ x: W / 2 - 420, y: 100, w: 840, h: 100, act: titleTap, silent: true });
   if (Settings.bighead) txt('RIESENKÖPFE', 28, 30, 18, '#ffd83a', 'left');
-  txt('Ballere in 90 Sekunden so viele Küken weg wie möglich!', W / 2, 225, 24, '#fff');
-  const bw = 340, bx = W / 2 - bw / 2;
-  button('SPIELEN', bx, 270, bw, 70, () => { G.state = 'worlds'; });
-  button(Settings.gore ? 'BLUT: VOLL' : 'BLUT: KONFETTI', bx, 355, bw, 52, () => { Settings.gore = !Settings.gore; store.set('gore', Settings.gore); }, '#ffb3b3');
-  button(Settings.sound ? 'TON: AN' : 'TON: AUS', bx - bw / 2 - 10, 420, bw, 52, () => { Settings.sound = !Settings.sound; store.set('sound', Settings.sound); }, '#b3e0ff');
-  button(`GEHEIMNISSE ${progress.eggs.length}/${EGGS.length}`, bx + bw / 2 + 10, 420, bw, 52, () => { G.state = 'album'; }, '#ff90e0');
-  const lines = mouse.touch ? [
-    'Tippen = Schuss  -  LADEN-Knopf = Nachladen',
+  txt('Ballere in 90 Sekunden so viele Küken weg wie möglich!', W / 2, 250, 24, '#fff');
+  const bw = 360, bx = W / 2 - bw / 2;
+  button('SPIELEN', bx, 300, bw, 78, () => { G.state = 'worlds'; });
+  button('ANLEITUNG', W / 2 - 230, 398, 222, 56, () => { G.state = 'help'; }, '#ffe9a8');
+  button('GEHEIMNISSE', W / 2 + 8, 398, 222, 56, () => { G.state = 'album'; }, '#ff90e0');
+  ghostButton(Settings.gore ? 'BLUT: VOLL' : 'BLUT: KONFETTI', bx + 40, 476, bw - 80, 46, () => { Settings.gore = !Settings.gore; store.set('gore', Settings.gore); });
+  soundButton(W - 56, 52);
+}
+
+function drawHelp() {
+  ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, W, H);
+  txt('ANLEITUNG', W / 2, 56, 52, '#ffd83a', 'center', '#5c0008');
+  const total = Math.min(W - 60, 1200), cw = (total - 24) / 2, x0 = W / 2 - total / 2;
+  const box = (title, lines, x, y, w, h) => {
+    ctx.fillStyle = 'rgba(255,233,168,0.95)'; rrect(ctx, x, y, w, h, 14); ctx.fill();
+    ctx.strokeStyle = '#3b1600'; ctx.lineWidth = 3; ctx.stroke();
+    txt(title, x + 20, y + 26, 22, '#5c0008', 'left', null);
+    lines.forEach((l, i) => txt(l, x + 20, y + 62 + i * 27, 17, '#3b1600', 'left', null));
+  };
+  const controls = mouse.touch ? [
+    'Tippen = Schuss',
+    'LADEN-Knopf = Nachladen',
     'WAFFE-Knopf = Waffe wechseln',
-    'Weit weg = mehr Punkte  -  Kopfschuss x1.5',
-    'Gold +5 Sek  -  Bomben reißen alle mit',
+    'Pause-Knopf oben = Pause',
+    'Laser: Finger gedrückt halten',
   ] : [
-    'Klick = Schuss  -  R/Leertaste/Rechtsklick = Laden',
-    '1/2/3, Q oder Mausrad = Waffe  -  P = Pause  -  F = Vollbild',
-    'Weit weg = mehr Punkte  -  Kopfschuss x1.5',
-    'Mehrere auf einmal = Bonus  -  Serie = Combo',
-    'Gold +5 Sek  -  Bomben reißen alle in der Nähe mit',
+    'Klick = Schuss',
+    'R / Leertaste / Rechtsklick = Laden',
+    '1 2 3 / Q / Mausrad = Waffe',
+    'P / ESC = Pause   F = Vollbild',
+    'M = Ton   Laser: Taste halten',
   ];
-  const ls = mouse.touch ? 24 : 17, lh = mouse.touch ? 34 : 26;
-  lines.forEach((l, i) => txt(l, W / 2, 500 + i * lh, ls, '#fff8e0'));
+  box('STEUERUNG', controls, x0, 100, cw, 210);
+  box('PUNKTE', [
+    'Weit entfernt = mehr Punkte',
+    'Kopfschuss = x1,5',
+    'Mehrere auf einmal = Bonus',
+    'Trefferserie = Combo bis x4',
+    'Gold = +5 Sek, Bomben reißen mit',
+  ], x0 + cw + 24, 100, cw, 210);
+  box('WAFFEN & WELTEN', [
+    'SCHROT: Streut um das Fadenkreuz, 8 Schuss',
+    'HARPUNE: Durchbohrt alles auf der Flugbahn, 5 Speere',
+    'LASER: Dauerfeuer, aber er überhitzt',
+    `Mit ${WORLDS[1].need} Punkten schaltest du die nächste Welt frei – samt neuer Waffe.`,
+  ], x0, 330, total, 180);
+  txt('Und überall sind Geheimnisse versteckt …', W / 2, 545, 18, '#ff90e0');
+  button('ZURÜCK', W / 2 - 150, 590, 300, 60, () => { G.state = 'menu'; }, '#ffe9a8');
 }
 
 function wrapText(str, n) {
@@ -1677,13 +1737,21 @@ function drawOver() {
   }
   ctx.globalAlpha = 1;
   if (G.overT > 1) {
-    button('NOCHMAL', W / 2 - 290, 510, 270, 66, () => startGame(G.world));
-    button('WELTEN', W / 2 + 20, 510, 270, 66, () => { G.state = 'worlds'; }, '#ffe9a8');
+    const canNext = next && progress.unlocked >= G.world + 1;
+    if (canNext) {
+      button('NOCHMAL', W / 2 - 300, 500, 280, 70, () => startGame(G.world), '#ffe9a8');
+      button('NÄCHSTE WELT', W / 2 + 20, 500, 280, 70, () => startGame(G.world + 1));
+    } else button('NOCHMAL', W / 2 - 160, 500, 320, 70, () => startGame(G.world));
+    ghostButton('MENÜ', W / 2 - 90, 600, 180, 48, () => { G.state = 'menu'; });
   }
 }
 
+let cursorMode = '';
 function drawCrosshair() {
-  if (mouse.touch) return;
+  const aiming = G.state === 'play' && !G.paused && !isPortrait();
+  const want = aiming ? 'none' : 'default';
+  if (want !== cursorMode) { cursorMode = want; cv.style.cursor = want; }
+  if (mouse.touch || !aiming) return;
   const x = mouse.x, y = mouse.y, r = 20 + G.recoil * 10;
   const col = G.state !== 'play' ? '#ff2d3d' : G.weapon === 'laser' ? '#7dff4a' : G.weapon === 'harpoon' ? '#40e0ff' : '#ff2d3d';
   ctx.lineCap = 'round';
@@ -1749,11 +1817,12 @@ window.addEventListener('keydown', e => {
   else if (k === '1' || k === '2' || k === '3') switchWeapon(WEAPON_ORDER[+k - 1]);
   else if (k === 'q') cycleWeapon(1);
   else if ((k === 'p' || k === 'escape') && G.state === 'play') { G.paused = !G.paused; stopLaser(); }
+  else if (k === 'escape' && (G.state === 'worlds' || G.state === 'album' || G.state === 'help')) G.state = 'menu';
   else if (k === 'm') { Settings.sound = !Settings.sound; store.set('sound', Settings.sound); if (!Settings.sound) Snd.laserOff(); }
   else if (k === 'f') {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
     else document.exitFullscreen?.();
-  } else if (k === 'enter' && (G.state === 'over' || G.state === 'menu' || G.state === 'worlds')) startGame(G.world);
+  } else if (k === 'enter' && (G.state === 'over' || G.state === 'worlds')) startGame(G.world);
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden && G.state === 'play') { G.paused = true; stopLaser(); } });
 window.addEventListener('resize', resize);

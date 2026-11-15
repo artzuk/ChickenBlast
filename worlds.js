@@ -281,10 +281,18 @@ function bgSpace(g) {
   }
   // Ringplanet
   const px = W * 0.2, py = 120;
-  g.fillStyle = '#c08040'; circ(g, px, py, 58); g.fill();
-  g.fillStyle = '#e8820c'; g.fillRect(px - 56, py - 18, 112, 10); g.fillRect(px - 50, py + 12, 100, 8);
-  g.strokeStyle = '#fff3a0'; g.lineWidth = 5; ell(g, px, py, 105, 22, -0.25); g.stroke();
-  g.fillStyle = '#c08040'; g.beginPath(); g.arc(px, py, 58, Math.PI + 0.3, TAU - 0.5); g.fill();
+  // hintere Ringhälfte -> Planet -> vordere Ringhälfte
+  const ring = (a0, a1) => {
+    g.strokeStyle = '#c8a050'; g.lineWidth = 9; g.beginPath(); g.ellipse(px, py, 105, 22, -0.25, a0, a1); g.stroke();
+    g.strokeStyle = '#fff3a0'; g.lineWidth = 4; g.beginPath(); g.ellipse(px, py, 105, 22, -0.25, a0, a1); g.stroke();
+  };
+  ring(Math.PI, TAU);
+  g.save(); circ(g, px, py, 58); g.clip();
+  g.fillStyle = '#c08040'; g.fillRect(px - 60, py - 60, 120, 120);
+  g.fillStyle = '#e8820c'; g.fillRect(px - 60, py - 18, 120, 10); g.fillRect(px - 60, py + 12, 120, 8);
+  g.fillStyle = 'rgba(0,0,0,0.3)'; circ(g, px + 22, py + 18, 58); g.fill();
+  g.restore();
+  ring(0, Math.PI);
 
   // Mondgebirge
   g.fillStyle = '#3a3a48';
