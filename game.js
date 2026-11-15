@@ -22,10 +22,16 @@ const G = {
   heat: 0, over: false, firing: false, laserTick: 0, burst: null,
   streak: 0, maxStreak: 0, kills: 0, shots: 0, hits: 0, heads: 0,
   spawnT: 0.5, shake: 0, flash: 0, recoil: 0, overT: 0, newBest: false, unlockedNew: null,
-  pending: [], shotT: 9, eject: false,
+  pending: [], shotT: 9, eject: false, egg: null, eggCool: 0, wish: 0, keyBuf: '', titleTaps: [],
 };
+const newEggState = () => ({
+  door: 0, doorHit: 0, doorOpen: false, aval: 0, avalT: 0, pads: {}, nova: 0, novaHit: 0, novaDone: false, wave: -1,
+  silo: 0, siloHit: 0, siloOpen: false, grainT: 0, peckT: 0, sun: 0, sunHit: 0, sunset: false, cloud: 0, eggRain: 0, eggT: 0, eggCloud: null, hatch: [],
+  anglerGone: false, monster: false, earth: 0, earthHit: 0, earthGone: false, landerGone: false,
+});
+G.egg = newEggState();
 let chicks = [], parts = [], splats = [], slicks = [];
-const progress = { unlocked: store.get('unlocked', 0), best: {} };
+const progress = { unlocked: store.get('unlocked', 0), best: {}, eggs: store.get('eggs', []) };
 for (const w of WORLDS) progress.best[w.id] = store.get('best_' + w.id, w.id === 'farm' ? store.get('best', 0) : 0);
 const world = () => WORLDS[G.world];
 const weaponsUnlocked = () => WORLDS.filter((w, i) => i <= progress.unlocked).map(w => w.weapon);
@@ -33,6 +39,7 @@ const weaponsUnlocked = () => WORLDS.filter((w, i) => i <= progress.unlocked).ma
 const mouse = { x: -100, y: -100, touch: !!(window.matchMedia && matchMedia('(pointer: coarse)').matches) };
 const isPortrait = () => mouse.touch && window.innerHeight > window.innerWidth;
 let buttons = [];
+let paletteMode = '';
 
 // Handy: Vollbild + Querformat erzwingen (geht nur nach einer Nutzeraktion)
 function goFullscreenLandscape() {
@@ -75,7 +82,10 @@ function rebuildBg() {
   bgCanvas.width = loCanvas.width; bgCanvas.height = loCanvas.height;
   const g = bgCanvas.getContext('2d');
   g.setTransform(KL, 0, 0, KL, 0, 0);
-  world().bg(g);
+  // fester Zufalls-Startwert: Hintergrund sieht bei jedem Neuaufbau gleich aus
+  const orig = Math.random; let seed = 1234567 + G.world * 999;
+  Math.random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  try { world().bg(g, paletteMode === 'sunset'); } finally { Math.random = orig; }
 }
 function clearField() {
   chicks = []; parts = []; splats = []; slicks = []; G.pending = [];
@@ -83,7 +93,7 @@ function clearField() {
 }
 function setWorld(i) {
   G.world = i;
-  setPalette(WORLDS[i].palette);
+  setPalette(WORLDS[i].palette); paletteMode = WORLDS[i].id;
   rebuildBg();
   ambInit(WORLDS[i]);
   clearField();
@@ -102,7 +112,9 @@ function startGame(i = G.world) {
     ammo: { shotgun: WEAPONS.shotgun.ammo, harpoon: WEAPONS.harpoon.ammo }, reload: 0, cool: 0.2, switchT: 0,
     heat: 0, over: false, firing: false, burst: null, weapon: WORLDS[i].weapon,
     streak: 0, maxStreak: 0, kills: 0, shots: 0, hits: 0, heads: 0, spawnT: 0.4, newBest: false, unlockedNew: null,
+    egg: newEggState(), eggCool: 0, wish: 0,
   });
+  if (world().id === 'farm' && amb.clouds.length) { amb.clouds.forEach(c => { c.rain = false; }); amb.clouds[0].rain = true; }
 }
 function endGame() {
   stopLaser();
@@ -164,7 +176,7 @@ function hitTest(c, px, py) {
   if (!hittable(c)) return null;
   const T = TYPES[c.type], f = touchF();
   if (T.swim && py > c.y + 3 * c.s) return null; // unter Wasser
-  const h = headPos(c), hr = (T.hr || 23) * c.s * f;
+  const h = headPos(c), hr = (T.hr || 23) * c.s * f * (Settings.bighead && !T.kind ? 1.7 : 1);
   if ((px - h.x) ** 2 + (py - h.y) ** 2 < hr * hr) return 'head';
   const b = bodyPos(c);
   const bx = (px - b.x) / (b.rx * f), by = (py - b.y) / (b.ry * f);
@@ -200,6 +212,17 @@ function damage(c, head, dmg = 1, force = false) {
     popText(c.x, h.y - 35 * c.s, 'KLIRR!', '#a0f0ff', 22, 0.7);
     return { killed: false, pts: 5 };
   }
+  if (T.rubber && !c.boss && !force) {
+    c.rhits = (c.rhits || 0) + 1; c.flash = 0.1;
+    Snd.voice('squeak', 1.1, 0.12);
+    for (let i = 0; i < 5; i++) parts.push({ k: 'star', x: c.x, y: bodyPos(c).y, vx: rand(-200, 200) * c.s, vy: rand(-300, -80) * c.s, rot: 0, life: 0.5, max: 0.5, s: c.s * 0.5 });
+    if (c.rhits >= 10) {
+      c.boss = true; c.s *= 2.6; c.hp = 14; c.speed *= 0.5; G.shake = Math.max(G.shake, 12);
+      popText(c.x, c.y - 140 * c.s, 'BOSS-GUMMIENTE!', '#ffe600', 44, 2);
+      discover('rubber');
+    } else popText(c.x, c.y - 60 * c.s, 'QUIETSCH!', '#fff3a0', 18, 0.5);
+    return { killed: false, pts: 2 };
+  }
   c.hp -= force ? 99 : head ? dmg + 1 : dmg;
   if (c.hp > 0) {
     c.flash = 0.18; c.speed *= 1.3; c.pause = 0;
@@ -209,11 +232,14 @@ function damage(c, head, dmg = 1, force = false) {
     return { killed: false, pts: 5 };
   }
   c.alive = false;
-  gore(c, head, T.big);
-  Snd.splat(T.big);
+  gore(c, head, c.boss ? 2.2 : T.big);
+  Snd.splat(c.boss ? 2 : T.big);
   if (T.bomb) G.pending.push({ t: 0.14, x: c.x, y: bodyPos(c).y, s: c.s, z: c.z, kind: T.bomb });
   let pts = T.pts * (1 + (1 - c.z) * 0.9);
   if (head) pts *= 1.5;
+  if (T.rubber && !c.boss) pts = 20;
+  if (G.egg.sunset && world().id === 'farm') pts *= 2;
+  if (T.fishBonus && G.state === 'play') popText(c.x, c.y - 60 * c.s, 'FISCH-BONUS!', '#7dffb0', 34, 1.4);
   if (T.gold && G.state === 'play') {
     G.time += 5; Snd.ding();
     popText(c.x, headPos(c).y - 50 * c.s, '+5 SEK!', '#7dffb0', 30, 1.4);
@@ -261,7 +287,7 @@ function gore(c, head, big = 1) {
   }
   const base = { type: c.type, col: T.col, dk: T.dk, s, rest: 0, bc: cols };
   const chunkGy = () => Math.max(HORIZON() + 24, c.gy + rand(-18, 18) * s);
-  parts.push({
+  if (!T.noHead) parts.push({
     ...base, k: 'chunk', part: 'head', x: h.x, y: h.y,
     vx: rand(-220, 220) * sv, vy: (head ? rand(-950, -700) : rand(-650, -350)) * sv,
     rot: 0, vr: rand(-14, 14) * gv, gy: chunkGy(), dir: c.dir, life: rand(3.5, 5),
@@ -369,6 +395,344 @@ function explode(x, y, s, z, kind) {
   } else popText(x, y - 80 * s, label, green ? '#7dff4a' : '#ffb347', 40, 1.2);
 }
 
+/* ---------------------------------------------------------------- Easter Eggs */
+function discover(id) {
+  if (progress.eggs.includes(id)) return;
+  progress.eggs.push(id); store.set('eggs', progress.eggs);
+  popText(W / 2, 200, 'GEHEIMNIS ENTDECKT!', '#ff90e0', 42, 2.4);
+  Snd.fanfare();
+}
+// prüft, ob ein Schuss ein Easter-Egg-Ziel getroffen hat
+function eggShot(px, py) {
+  if (G.state !== 'play') return false;
+  const id = world().id, E = G.egg;
+  if (id === 'farm') {
+    for (const cl of amb.clouds) {
+      if (!cl.rain || !cloudHit(cl, px, py)) continue;
+      E.cloud++;
+      for (let i = 0; i < 6; i++) parts.push({ k: 'dirt', x: px, y: py, vx: rand(-60, 60), vy: rand(-40, 120), gy: py + 200, life: 0.6, r: 2, col: '#a8d8ff' });
+      if (E.cloud >= 3) {
+        cl.rain = false; E.eggRain = 15; E.eggT = 0; E.eggCloud = cl;
+        popText(cl.x + 30 * cl.s, cl.y + 50, 'EIER-REGEN!', '#fff3a0', 36, 1.6);
+        discover('cloud');
+      } else popText(px, py - 20, 'GRUMMEL', '#d8d8d0', 16, 0.5);
+      return true;
+    }
+    const sn = farmSun();
+    if (!E.sunset && (px - sn.x) ** 2 + (py - sn.y) ** 2 < (sn.r + 6) ** 2) {
+      E.sun++; E.sunHit = 0.2;
+      if (E.sun >= 10) {
+        E.sunset = true;
+        popText(W / 2, 300, 'SONNENUNTERGANG!', '#ffa020', 44, 2.2);
+        popText(W / 2, 360, 'DOPPELTE PUNKTE!', '#fff3a0', 30, 2.2);
+        discover('sun');
+      }
+      return true;
+    }
+    const sr = siloRect();
+    if (!E.siloOpen && px > sr.x && px < sr.x + sr.w && py > sr.y && py < sr.y + sr.h) {
+      E.silo++; E.siloHit = 0.2;
+      for (let i = 0; i < 4; i++) parts.push({ k: 'dirt', x: px, y: py, vx: rand(-100, 100), vy: rand(-150, -30), gy: sr.y + sr.h, life: 1, r: 2, col: '#c9c4b8' });
+      Snd.click();
+      if (E.silo >= 6) {
+        E.siloOpen = true; E.grainT = 1.6; E.peckT = 7;
+        G.shake = Math.max(G.shake, 8); Snd.boom();
+        popText(sr.x + 140, sr.y + 10, 'KÖRNER-REGEN!', '#ffd83a', 38, 2);
+        discover('silo');
+      } else popText(px, py - 16, 'PLONK', '#d8d8d0', 16, 0.4);
+      return true;
+    }
+  }
+  if (id === 'pond' && !E.anglerGone) {
+    const d = dockRect();
+    if (px > d.x && px < d.x + d.w && py > d.y && py < d.y + d.h) {
+      E.anglerGone = true;
+      const ax = W * 0.72 + 180, z = 0.03;
+      const c = spawnChick('angler', { dir: 1, z });
+      c.x = ax;
+      parts.push({ k: 'ring', x: ax, y: c.gy, r: 4, s: c.s * 2, life: 1, max: 1 });
+      for (let i = 0; i < 10; i++) parts.push({ k: 'dirt', x: ax, y: c.gy, vx: rand(-80, 80), vy: rand(-260, -80), gy: c.gy, life: 1, r: 2, col: '#d0e8ff' });
+      Snd.splash(); Snd.voice('squawk', 1, 0.12);
+      popText(ax, c.gy - 60, 'PLATSCH!', '#a0f0ff', 30, 1.4);
+      discover('dock');
+      return true;
+    }
+  }
+  if (id === 'space') {
+    for (const st of amb.shoot) {
+      if ((px - st.x) ** 2 + (py - st.y) ** 2 > 38 * 38) continue;
+      st.life = 0; G.wish = 10;
+      for (let i = 0; i < 14; i++) parts.push({ k: 'star', x: st.x, y: st.y, vx: rand(-300, 300), vy: rand(-300, 200), rot: 0, life: 1, max: 1, s: 0.6 });
+      Snd.wish();
+      popText(W / 2, 300, 'WUNSCH ERFÜLLT!', '#ff90e0', 44, 2.2);
+      popText(W / 2, 360, '10 SEK UNENDLICH FEUER', '#fff3a0', 28, 2.2);
+      discover('star');
+      return true;
+    }
+    const ep = earthPos();
+    if (!E.earthGone && (px - ep.x) ** 2 + (py - ep.y) ** 2 < (ep.r + 6) ** 2) {
+      E.earth++; E.earthHit = 0.3;
+      if (E.earth >= 3) {
+        E.earthGone = true; G.shake = Math.max(G.shake, 20); G.flash = 0.8;
+        Snd.boom();
+        for (let i = 0; i < 24; i++) parts.push({ k: 'fire', x: ep.x + rand(-15, 15), y: ep.y + rand(-15, 15), vx: rand(-200, 200), vy: rand(-200, 200), r: rand(8, 20), life: rand(0.4, 0.9), max: 0.9 });
+        for (let i = 0; i < 30; i++) parts.push({ k: 'glass', x: ep.x, y: ep.y, vx: rand(-260, 260), vy: rand(-260, 260), rot: rand(0, TAU), vr: rand(-6, 6), r: rand(3, 7), life: 2.5, max: 2.5 });
+        popText(W / 2, 280, 'DU HAST DIE ERDE', '#ff4a4a', 46, 3);
+        popText(W / 2, 340, 'GESPRENGT!', '#ff4a4a', 46, 3);
+        discover('earth');
+      } else popText(ep.x - 40, ep.y + 60, 'NICHT DIE ERDE!', '#ff4a4a', 24, 1.2);
+      return true;
+    }
+    const lp = landerPos();
+    if (!E.landerGone && px > lp.x - 26 && px < lp.x + 26 && py > lp.y - 52 && py < lp.y + 4) {
+      E.landerGone = true;
+      const c = spawnChick('lander', { dir: lp.x > W / 2 ? -1 : 1, z: 0 });
+      c.x = lp.x; c.y0 = lp.y - 34; c.y = c.y0; c.rt = 0;
+      Snd.rocket();
+      popText(lp.x, lp.y - 80, 'ABHEBEN!', '#40e0ff', 30, 1.4);
+      discover('lander');
+      return true;
+    }
+  }
+  if (id === 'farm' && !E.doorOpen) {
+    const d = farmDoor();
+    if (px > d.x - 6 && px < d.x + d.w + 6 && py > d.y - 6 && py < d.y + d.h + 2) {
+      E.door++; E.doorHit = 0.25;
+      for (let i = 0; i < 6; i++) parts.push({ k: 'dirt', x: px, y: py, vx: rand(-120, 120), vy: rand(-200, -40), gy: d.y + d.h, life: 1, r: rand(1.5, 3), col: pick(['#f2ead8', '#b5302a']) });
+      Snd.click();
+      if (E.door >= 5) {
+        E.doorOpen = true; E.aval = 22; E.avalT = 0.35;
+        G.shake = Math.max(G.shake, 12);
+        Snd.boom(); Snd.voice('squawk', 1, 0.12);
+        popText(d.x + 120, d.y - 40, 'SCHEUNEN-LAWINE!', '#ffd83a', 40, 2);
+        discover('barn');
+      } else popText(d.x + d.w / 2, d.y - 16, 'KNACK!', '#f2ead8', 18, 0.5);
+      return true;
+    }
+  }
+  if (id === 'pond') {
+    for (let i = 0; i < pondPads.length; i++) {
+      const pd = pondPads[i], rx = pd.r * 1.2 + 4, ry = Math.max(pd.r * 0.45, 7);
+      if (((px - pd.x) / rx) ** 2 + ((py - pd.y) / ry) ** 2 > 1) continue;
+      E.pads[i] = (E.pads[i] || 0) + 1;
+      parts.push({ k: 'ring', x: pd.x, y: pd.y, r: pd.r * 0.3, s: chickScale(clamp(zFromScreenY(pd.y), 0, 1)), life: 0.7, max: 0.7 });
+      if (E.pads[i] >= 3) { E.pads[i] = 0; launchPike(pd); }
+      return true;
+    }
+  }
+  if (id === 'space' && !E.novaDone) {
+    const P = planetPos();
+    if ((px - P.x) ** 2 + (py - P.y) ** 2 < (P.r + 6) ** 2) {
+      E.nova++; E.novaHit = 0.2;
+      for (let i = 0; i < 6; i++) parts.push({ k: 'spark', x: px, y: py, vx: rand(-200, 200), vy: rand(-200, 200), life: 0.3, max: 0.3 });
+      if (E.nova >= 10) supernova();
+      return true;
+    }
+  }
+  return false;
+}
+function launchPike(pd) {
+  const z = clamp(zFromScreenY(pd.y), 0, 1);
+  let target = null, best = 420;
+  for (const c of chicks) {
+    if (!c.alive || !TYPES[c.type].swim) continue;
+    const d = Math.abs(c.x - pd.x) + Math.abs(c.gy - pd.y) * 2;
+    if (d < best) { best = d; target = c; }
+  }
+  const dir = target ? (target.x >= pd.x ? 1 : -1) : (pd.x < W / 2 ? 1 : -1);
+  const c = spawnChick('pike', { dir, z });
+  c.x = pd.x; c.lx0 = pd.x; c.lx1 = target ? target.x + target.dir * target.speed * 0.4 : pd.x + dir * 220;
+  c.leap = 0; c.target = target; c.y = c.gy;
+  for (let i = 0; i < 14; i++) parts.push({ k: 'dirt', x: pd.x, y: pd.y, vx: rand(-150, 150) * c.s, vy: rand(-500, -200) * c.s, gy: pd.y, life: 1.2, r: rand(2, 4) * c.s + 1, col: pick(['#d0e8ff', '#ffffff']) });
+  parts.push({ k: 'ring', x: pd.x, y: pd.y, r: 6, s: c.s * 2, life: 1, max: 1 });
+  Snd.splash();
+  popText(pd.x, pd.y - 120 * c.s, 'HECHT!', '#7dffb0', 34, 1.2);
+  discover('pike');
+}
+function supernova() {
+  const E = G.egg, P = planetPos();
+  E.novaDone = true; E.wave = 0;
+  G.flash = 1.4; G.shake = 40;
+  Snd.boom(); Snd.nova();
+  for (let i = 0; i < 40; i++) parts.push({ k: 'fire', green: Math.random() < 0.3, x: P.x + rand(-30, 30), y: P.y + rand(-30, 30), vx: rand(-500, 500), vy: rand(-500, 500), r: rand(20, 50), life: rand(0.5, 1.1), max: 1.1 });
+  popText(P.x + 220, P.y + 190, 'SUPERNOVA!', '#fff3a0', 60, 2.5);
+  discover('nova');
+}
+function updateEggs(dt) {
+  const E = G.egg;
+  E.doorHit = Math.max(0, E.doorHit - dt); E.novaHit = Math.max(0, E.novaHit - dt);
+  G.eggCool = Math.max(0, G.eggCool - dt);
+  G.wish = Math.max(0, G.wish - dt);
+  E.siloHit = Math.max(0, E.siloHit - dt); E.sunHit = Math.max(0, E.sunHit - dt); E.earthHit = Math.max(0, E.earthHit - dt);
+  E.peckT = Math.max(0, E.peckT - dt);
+  // Körner-Regen aus dem Silo
+  if (E.grainT > 0) {
+    E.grainT -= dt;
+    const sr = siloRect();
+    for (let i = 0; i < 3; i++) parts.push({ k: 'dirt', stamp: true, x: sr.x + sr.w / 2, y: sr.y + 10, vx: rand(40, 650), vy: rand(-650, -250), gy: rand(HORIZON() + 30, H), life: 3, r: rand(1.5, 3), col: pick(['#ffd83a', '#e8b84a', '#fff3a0']) });
+  }
+  // Eier-Regen aus der Wolke
+  if (E.eggRain > 0) {
+    E.eggT -= dt;
+    if (E.eggT <= 0) {
+      E.eggT = 0.15; E.eggRain--;
+      const cl = E.eggCloud, c = spawnChick('egg', { dir: 1, z: rand(0.05, 1) });
+      c.x = cl.x + rand(-10, 90) * cl.s; c.y = cl.y + 15; c.vy = rand(0, 80); c.rot = rand(0, TAU);
+    }
+  }
+  // geschlüpfte Küken aus gelandeten Eiern
+  for (const h of E.hatch) { const c = spawnChick('chick', { dir: Math.random() < 0.5 ? 1 : -1, z: h.z }); c.x = h.x; }
+  E.hatch.length = 0;
+  // Seeungeheuer erwacht nach vielen Abschüssen
+  if (world().id === 'pond' && G.state === 'play' && !E.monster && G.kills >= 40) {
+    E.monster = true;
+    const c = spawnChick('monster', { dir: Math.random() < 0.5 ? 1 : -1, z: 0.12 });
+    c.x = rand(300, W - 300); c.mt = 0; c.yoff = 140;
+    Snd.voice('roar', 1, 0.3);
+    popText(c.x, c.gy - 150, 'SEEUNGEHEUER!', '#7dffb0', 40, 2);
+    discover('monster');
+  }
+  // Scheunen-Lawine: Küken strömen aus dem Tor
+  if (E.aval > 0) {
+    E.avalT -= dt;
+    if (E.avalT <= 0) {
+      E.avalT = 0.13; E.aval--;
+      const d = farmDoor();
+      const c = spawnChick(pick(['chick', 'chick', 'chick', 'runner', 'chick', 'hen']), { dir: Math.random() < 0.85 ? 1 : -1, z: rand(0, 0.1) });
+      c.x = d.x + d.w / 2 + rand(-8, 8); c.speed *= 1.5;
+      if (Math.random() < 0.4) Snd.voice('peep', rand(0.9, 1.2), 0.05);
+    }
+  }
+  // Supernova: Schockwelle zerfetzt alles, was sie erreicht
+  if (E.wave >= 0) {
+    E.wave += dt * 1100;
+    const P = planetPos();
+    let pts = 0, n = 0;
+    for (const c of chicks) {
+      if (!c.alive) continue;
+      const b = bodyPos(c);
+      if ((b.x - P.x) ** 2 + (b.y - P.y) ** 2 < E.wave * E.wave) {
+        const r = damage(c, false, 1, true);
+        if (r.killed) { pts += r.pts * 2; n++; }
+      }
+    }
+    if (n && G.state === 'play') {
+      const add = Math.round(pts * multiplier());
+      G.score += add; G.kills += n;
+      popText(clamp(P.x + E.wave * 0.7, 100, W - 100), clamp(P.y + E.wave * 0.5, 120, H - 120), '+' + add, '#fff3a0', 30, 1);
+    }
+    if (E.wave > 2600) E.wave = -1;
+  }
+}
+function drawAngler() {
+  const ax = W * 0.72 + 150, ay = HORIZON() + 3, t = G.t;
+  ctx.strokeStyle = '#e8820c'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(ax - 2, ay - 2); ctx.lineTo(ax + 2, ay + 8); ctx.moveTo(ax + 4, ay - 2); ctx.lineTo(ax + 8, ay + 8); ctx.stroke();
+  ctx.save(); ctx.translate(ax, ay); ctx.scale(0.36, 0.36);
+  drawChickBody(ctx, { flash: 0, pause: 1, hop: 0, walk: 0, t, peck: 0 }, TYPES.angler);
+  ctx.restore();
+  const bob = Math.sin(t * 2.2) * 1.5;
+  ctx.strokeStyle = '#5a4020'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(ax + 6, ay - 10); ctx.lineTo(ax + 44, ay - 44); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(ax + 44, ay - 44); ctx.lineTo(ax + 52, ay + 30 + bob); ctx.stroke();
+  ctx.fillStyle = '#ff4a4a'; circ(ctx, ax + 52, ay + 30 + bob, 3); ctx.fill();
+}
+function drawEggs() {
+  const id = world().id, active = G.state === 'play' || G.state === 'over', E = active ? G.egg : newEggState();
+  if (id === 'farm') {
+    const sn = farmSun();
+    if (E.sun > 0 && !E.sunset) { ctx.fillStyle = `rgba(255,110,40,${Math.min(0.7, E.sun * 0.07) + E.sunHit})`; circ(ctx, sn.x, sn.y, sn.r); ctx.fill(); }
+    if (E.sunset) {   // Sonne mit Sonnenbrille
+      ctx.fillStyle = '#1a1a1a';
+      rrect(ctx, sn.x - 36, sn.y - 12, 30, 20, 7); ctx.fill(); rrect(ctx, sn.x + 6, sn.y - 12, 30, 20, 7); ctx.fill();
+      ctx.fillRect(sn.x - 8, sn.y - 8, 16, 4);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(sn.x - 30, sn.y - 8, 8, 4); ctx.fillRect(sn.x + 12, sn.y - 8, 8, 4);
+      ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sn.x, sn.y + 14, 14, 0.3, Math.PI - 0.3); ctx.stroke();
+    }
+    const sr = siloRect();
+    if (E.siloOpen) {
+      ctx.fillStyle = '#3b2a1e'; ell(ctx, sr.x + sr.w / 2, sr.y + 45, 9, 20); ctx.fill();
+      ctx.fillStyle = '#ffd83a'; ell(ctx, sr.x + sr.w / 2 + 10, sr.y + sr.h, 34, 9); ctx.fill();
+    } else if (E.silo > 0) {
+      const sh = E.siloHit > 0 ? rand(-2, 2) : 0;
+      ctx.strokeStyle = '#5a5650'; ctx.lineWidth = 2;
+      for (let i = 0; i < Math.min(E.silo, 5); i++) {
+        const yy = sr.y + 20 + i * 18;
+        ctx.beginPath(); ctx.moveTo(sr.x + 6 + sh, yy); ctx.lineTo(sr.x + 18 + sh, yy + 8); ctx.lineTo(sr.x + 30 + sh, yy + 2); ctx.stroke();
+      }
+    }
+    const d = farmDoor();
+    if (E.doorOpen) {
+      ctx.fillStyle = '#1a1210'; ctx.fillRect(d.x, d.y, d.w, d.h);
+      ctx.fillStyle = '#f2ead8';
+      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 16, d.y + 4); ctx.lineTo(d.x - 16, d.y + d.h + 4); ctx.lineTo(d.x, d.y + d.h); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(d.x + d.w, d.y); ctx.lineTo(d.x + d.w + 16, d.y + 4); ctx.lineTo(d.x + d.w + 16, d.y + d.h + 4); ctx.lineTo(d.x + d.w, d.y + d.h); ctx.closePath(); ctx.fill();
+    } else if (E.door > 0) {
+      const sh = E.doorHit > 0 ? rand(-2, 2) : 0;
+      ctx.strokeStyle = '#3b2a1e'; ctx.lineWidth = 2;
+      const cracks = [[0.2, 0.1, 0.5, 0.45], [0.8, 0.2, 0.55, 0.6], [0.3, 0.9, 0.5, 0.55], [0.9, 0.8, 0.6, 0.4]];
+      for (let i = 0; i < Math.min(E.door, 4); i++) {
+        const [x0, y0, x1, y1] = cracks[i];
+        ctx.beginPath(); ctx.moveTo(d.x + sh + x0 * d.w, d.y + y0 * d.h); ctx.lineTo(d.x + sh + x1 * d.w, d.y + y1 * d.h); ctx.stroke();
+      }
+    }
+  }
+  if (id === 'pond' && !E.anglerGone) drawAngler();
+  if (id === 'space') {
+    const P = planetPos();
+    if (E.novaDone) drawNovaRemnant(ctx, G.t);
+    else if (E.nova > 0) {
+      const a = Math.min(1, E.nova / 9) * (0.6 + 0.4 * Math.sin(G.t * (6 + E.nova * 2)));
+      ctx.strokeStyle = `rgba(255,243,160,${a})`; ctx.lineWidth = 3;
+      for (let i = 0; i < E.nova; i++) {
+        const ang = i * 2.4;
+        ctx.beginPath(); ctx.moveTo(P.x, P.y);
+        ctx.lineTo(P.x + Math.cos(ang) * P.r * 0.55, P.y + Math.sin(ang) * P.r * 0.55 + 6);
+        ctx.lineTo(P.x + Math.cos(ang + 0.3) * P.r * 0.95, P.y + Math.sin(ang + 0.3) * P.r * 0.95);
+        ctx.stroke();
+      }
+      if (E.novaHit > 0) { ctx.fillStyle = `rgba(255,255,255,${E.novaHit * 2})`; circ(ctx, P.x, P.y, P.r); ctx.fill(); }
+    }
+    const ep = earthPos();
+    if (!E.earthGone) {
+      drawEarth(ctx);
+      if (E.earthHit > 0) { ctx.fillStyle = `rgba(255,60,60,${E.earthHit * 2})`; circ(ctx, ep.x, ep.y, ep.r); ctx.fill(); }
+    } else {   // Trümmerring, wo die Erde war
+      ctx.fillStyle = '#9090a0';
+      for (let i = 0; i < 14; i++) {
+        const a = i * 0.45 + G.t * 0.2, r = 22 + (i % 3) * 7;
+        ctx.fillRect(ep.x + Math.cos(a) * r, ep.y + Math.sin(a) * r * 0.5, 3 + (i % 2) * 2, 3);
+      }
+    }
+    if (!E.landerGone) drawLanderTop(ctx);
+  }
+}
+// Abendrot: eigene Palette (Himmelblau -> Orange/Rosa/Violett) + warmer Verlauf
+const SUNSET_PAL = WORLDS[0].palette.map(c => ({ '#2a4fa0': '#5a2a6a', '#3f7fd8': '#c0506a', '#6cb0f0': '#ff9a5a', '#b8e0ff': '#ffd0a0', '#3050e0': '#8a3a7a' }[c] || c));
+
+function syncPalette() {
+  const want = world().id === 'farm' && (G.state === 'play' || G.state === 'over') && G.egg.sunset ? 'sunset' : world().id;
+  if (want === paletteMode) return;
+  paletteMode = want;
+  setPalette(want === 'sunset' ? SUNSET_PAL : world().palette);
+  rebuildBg();
+}
+function drawSunset() {
+  const gr = ctx.createLinearGradient(0, 0, 0, H);
+  gr.addColorStop(0, 'rgba(255,120,80,0.12)'); gr.addColorStop(0.55, 'rgba(255,150,60,0.18)'); gr.addColorStop(1, 'rgba(90,20,70,0.32)');
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
+}
+function drawNovaWave() {
+  const E = G.egg;
+  if (E.wave < 0) return;
+  const P = planetPos(), f = clamp(1 - E.wave / 2600, 0, 1);
+  ctx.strokeStyle = `rgba(255,250,220,${0.9 * f})`; ctx.lineWidth = 10 + 40 * f;
+  circ(ctx, P.x, P.y, E.wave); ctx.stroke();
+  ctx.strokeStyle = `rgba(64,224,255,${0.7 * f})`; ctx.lineWidth = 8;
+  circ(ctx, P.x, P.y, Math.max(1, E.wave - 50)); ctx.stroke();
+}
+
 /* ---------------------------------------------------------------- Waffen: Logik */
 const gunOrigin = () => ({ x: W / 2, y: H + 20 });
 
@@ -401,7 +765,8 @@ function triggerDown(px, py) {
     if (mouse.touch) { reload(); return; }
     Snd.empty(); popText(px, py - 40, 'NACHLADEN!', '#ff6b6b', 24, 0.6); G.cool = 0.15; return;
   }
-  G.ammo[G.weapon]--; G.shots++; G.cool = w.cool;
+  if (G.wish <= 0) G.ammo[G.weapon]--;
+  G.shots++; G.cool = w.cool;
   if (G.weapon === 'shotgun') pointShot(px, py, true);
   else harpoonShot(px, py);
 }
@@ -457,9 +822,10 @@ function pointShot(px, py, playing) {
     if (!h && pellets.some(q => hitTest(c, q.x, q.y))) h = 'body';
     if (h) hits.push([c, h]);
   }
+  const egg = playing && eggShot(px, py);
   // Schrotkörner, die nichts getroffen haben, schlagen in Boden/Wasser ein
   for (const q of pellets) if (!chicks.some(c => hitTest(c, q.x, q.y))) pelletFx(q.x, q.y);
-  if (!hits.length) { if (playing) G.streak = 0; return; }
+  if (!hits.length) { if (playing && !egg) G.streak = 0; return; }
   const res = { kills: 0, total: 0, heads: 0 };
   for (const [c, h] of hits) {
     const r = damage(c, h === 'head');
@@ -486,6 +852,7 @@ function harpoonShot(px, py) {
   const O = gunOrigin();
   G.recoil = 1; G.shake = Math.max(G.shake, 3);
   Snd.harpoon();
+  eggShot(px, py);
   // Zieltiefe: angeklickter Gegner > Wasser-/Bodenpunkt > ferner Himmel
   let wA = null;
   for (let i = chicks.length - 1; i >= 0; i--) if (hitTest(chicks[i], px, py)) { wA = chickScale(chicks[i].z); break; }
@@ -548,6 +915,7 @@ function stopLaser() {
 function laserTick() {
   const px = mouse.x, py = mouse.y;
   for (let i = 0; i < 3; i++) parts.push({ k: 'spark', x: px, y: py, vx: rand(-300, 300), vy: rand(-300, 200), life: 0.2, max: 0.2 });
+  if (G.eggCool <= 0 && eggShot(px, py)) G.eggCool = 0.12;
   if (py > HORIZON() + 10 && Math.random() < 0.5) { dctx.fillStyle = 'rgba(20,20,30,0.4)'; ell(dctx, px + rand(-4, 4), py, 5, 2); dctx.fill(); }
   let kills = 0, total = 0;
   for (let i = chicks.length - 1; i >= 0; i--) {
@@ -596,7 +964,47 @@ function update(dt) {
     const T = TYPES[c.type];
     c.t += dt; c.flash = Math.max(0, c.flash - dt);
     const persp = 0.45 + 0.75 * c.z;
-    if (T.fly) {
+    if (T.leap) {
+      // Hecht: Sprung im Bogen, schnappt sich das Ziel und taucht wieder ab
+      c.leap += dt / 1.1;
+      const u = Math.min(1, c.leap), hgt = 160;
+      c.x = c.lx0 + (c.lx1 - c.lx0) * u;
+      c.y = c.gy - Math.sin(Math.PI * u) * hgt * c.s;
+      c.ang = Math.atan2(-Math.cos(Math.PI * u) * Math.PI * hgt * c.s, Math.abs(c.lx1 - c.lx0) + 1);
+      if (u >= 1) {
+        if (c.target && c.target.alive) {
+          damage(c.target, false, 1, true);
+          popText(c.x, c.gy - 70 * c.s, 'SCHNAPP!', '#7dffb0', 32, 1.2);
+        }
+        c.alive = false;
+        parts.push({ k: 'ring', x: c.x, y: c.gy, r: 6, s: c.s * 2, life: 1, max: 1 });
+        for (let i = 0; i < 12; i++) parts.push({ k: 'dirt', x: c.x, y: c.gy, vx: rand(-150, 150) * c.s, vy: rand(-450, -150) * c.s, gy: c.gy, life: 1.2, r: rand(2, 4) * c.s + 1, col: pick(['#d0e8ff', '#ffffff']) });
+        Snd.splash();
+      }
+      continue;
+    }
+    if (T.monster) {
+      // taucht auf, bleibt kurz, taucht wieder ab
+      c.mt += dt;
+      c.yoff = c.mt < 1.2 ? 140 * (1 - c.mt / 1.2) : c.mt < 4.7 ? 0 : 140 * Math.min(1, (c.mt - 4.7) / 1.2);
+      c.y = c.gy + Math.sin(c.t * 1.5) * 2 * c.s;
+      if (c.mt > 6) c.alive = false;
+    } else if (T.rocket) {
+      // Landefähre: steigt auf, fliegt dann quer übers Bild
+      c.rt += dt;
+      if (c.rt < 1.6) c.y = c.y0 - 91 * c.rt * c.rt;
+      else { c.x += c.dir * 240 * dt; c.y = c.y0 - 233 + Math.sin(c.rt * 3) * 15; }
+    } else if (T.fall) {
+      // Ei fällt aus der Wolke; landet es, schlüpft ein Küken
+      c.vy += 700 * dt; c.y += c.vy * dt; c.rot += dt * 3;
+      if (c.y >= c.gy) {
+        c.alive = false;
+        dctx.fillStyle = '#ffd83a'; ell(dctx, c.x, c.gy, 10 * c.s, 3 * c.s); dctx.fill();
+        dctx.fillStyle = '#fbfbf5'; dctx.fillRect(c.x - 8 * c.s, c.gy - 2, 4, 2); dctx.fillRect(c.x + 5 * c.s, c.gy - 1, 4, 2);
+        G.egg.hatch.push({ x: c.x, z: c.z });
+        Snd.voice('peep', 1.2, 0.05);
+      }
+    } else if (T.fly) {
       const sp = T.zig ? c.speed * (1 + 0.7 * Math.sin(c.t * 2.1)) : c.speed;
       c.x += c.dir * sp * persp * dt;
       c.y = c.ay0 + Math.sin(c.t * (T.zig ? 1.4 : 2.3)) * (T.zig ? 60 : 26);
@@ -626,6 +1034,7 @@ function update(dt) {
       c.yoff = (T.size > 1.2 ? 14 : 18) + c.sub * 90;
       c.y = c.gy + Math.sin(c.t * 3) * 1.5 * c.s;
     } else {
+      if (G.egg.peckT > 0 && W0.id === 'farm') c.pause = Math.max(c.pause, 0.15); // Körner picken
       if (c.pause > 0) {
         c.pause -= dt;
         c.peck = Math.max(0, Math.sin(c.t * 14));
@@ -653,13 +1062,16 @@ function update(dt) {
     if (T.voice !== 'squawk' && T.voice !== 'honk' || Math.random() < 0.3) Snd.voice(T.voice, rand(0.9, 1.15) * (T.gold ? 1.2 : 1), 0.02 + 0.04 * c.z);
   }
 
+  updateEggs(dt);
+
   // Explosionen
   for (const p of G.pending) { p.t -= dt; if (p.t <= 0) { p.done = true; explode(p.x, p.y, p.s, p.z, p.kind); } }
   G.pending = G.pending.filter(p => !p.done);
 
   // Laser
   if (G.firing && G.state === 'play' && G.weapon === 'laser') {
-    G.heat = Math.min(1, G.heat + dt * 0.42); Snd.laserHeat(G.heat);
+    if (G.wish <= 0) G.heat = Math.min(1, G.heat + dt * 0.42);
+    Snd.laserHeat(G.heat);
     G.laserTick -= dt;
     if (G.laserTick <= 0) { G.laserTick = 0.05; laserTick(); }
     if (G.heat >= 1) { G.over = true; stopLaser(); Snd.overheat(); popText(W / 2, H - 170, 'ÜBERHITZT!', '#ff5a5a', 36, 1.2); }
@@ -720,7 +1132,10 @@ function update(dt) {
         break;
       case 'dirt':
         p.vy += grav * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
-        if ((p.vy > 0 && p.y >= p.gy) || p.life <= 0) p.dead = true;
+        if ((p.vy > 0 && p.y >= p.gy) || p.life <= 0) {
+          p.dead = true;
+          if (p.stamp) { dctx.fillStyle = p.col; dctx.fillRect(p.x - 1.5, p.gy - 1, 3, 2); }
+        }
         break;
       case 'glass':
         p.vy += grav * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; p.life -= dt; if (p.life <= 0) p.dead = true;
@@ -880,6 +1295,7 @@ function drawSpear(p) {
 
 /* ---------------------------------------------------------------- Rendern */
 function render() {
+  syncPalette();
   ctx = lctx;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = world().sky; ctx.fillRect(0, 0, loCanvas.width, loCanvas.height);
@@ -888,6 +1304,7 @@ function render() {
   ctx.save();
   if (G.shake > 0) ctx.translate(rand(-1, 1) * G.shake, rand(-1, 1) * G.shake);
   ctx.drawImage(bgCanvas, 0, 0, W, H);
+  drawEggs();
   ambDraw();
   ctx.drawImage(decalCanvas, 0, 0, W, H);
 
@@ -954,6 +1371,8 @@ function render() {
         ctx.restore(); break;
     }
   }
+  if (world().id === 'farm' && (G.state === 'play' || G.state === 'over') && G.egg.sunset) drawSunset();
+  drawNovaWave();
   drawBeam();
   drawGun();
   ctx.restore();
@@ -990,6 +1409,7 @@ function render() {
   if (G.state === 'play') drawHUD();
   else if (G.state === 'menu') drawMenu();
   else if (G.state === 'worlds') drawWorlds();
+  else if (G.state === 'album') drawAlbum();
   else if (G.state === 'over') { drawHUD(); drawOver(); }
   if (G.paused) {
     buttons = [];
@@ -1063,6 +1483,8 @@ function drawHUD() {
   const pulse = low ? 1 + 0.12 * Math.abs(Math.sin(G.t * 6)) : 1;
   txt(`${Math.floor(tt / 60)}:${String(tt % 60).padStart(2, '0')}`, W / 2, 42, 46 * pulse, low ? '#ff5a5a' : '#fff');
 
+  if (G.wish > 0 && G.state === 'play') txt(`UNENDLICH FEUER ${Math.ceil(G.wish)}`, W / 2, 92, 20, `hsl(${(G.t * 300) % 360},100%,70%)`);
+  if (G.egg.sunset && G.state === 'play' && world().id === 'farm') txt('x2 PUNKTE', W / 2, 92, 20, '#ffa020');
   txt('REKORD', W - 28, 30, 16, '#ffe9a8', 'right');
   txt(String(Math.max(progress.best[world().id], G.score)), W - 28, 62, 30, '#fff', 'right');
 
@@ -1146,11 +1568,14 @@ function drawTitle(y) {
 function drawMenu() {
   ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, 0, W, H);
   drawTitle(130);
+  buttons.push({ x: W / 2 - 420, y: 80, w: 840, h: 100, act: titleTap, silent: true });
+  if (Settings.bighead) txt('RIESENKÖPFE', 28, 30, 18, '#ffd83a', 'left');
   txt('Ballere in 90 Sekunden so viele Küken weg wie möglich!', W / 2, 225, 24, '#fff');
   const bw = 340, bx = W / 2 - bw / 2;
   button('SPIELEN', bx, 270, bw, 70, () => { G.state = 'worlds'; });
   button(Settings.gore ? 'BLUT: VOLL' : 'BLUT: KONFETTI', bx, 355, bw, 52, () => { Settings.gore = !Settings.gore; store.set('gore', Settings.gore); }, '#ffb3b3');
-  button(Settings.sound ? 'TON: AN' : 'TON: AUS', bx, 420, bw, 52, () => { Settings.sound = !Settings.sound; store.set('sound', Settings.sound); }, '#b3e0ff');
+  button(Settings.sound ? 'TON: AN' : 'TON: AUS', bx - bw / 2 - 10, 420, bw, 52, () => { Settings.sound = !Settings.sound; store.set('sound', Settings.sound); }, '#b3e0ff');
+  button(`GEHEIMNISSE ${progress.eggs.length}/${EGGS.length}`, bx + bw / 2 + 10, 420, bw, 52, () => { G.state = 'album'; }, '#ff90e0');
   const lines = mouse.touch ? [
     'Tippen = Schuss  -  LADEN-Knopf = Nachladen',
     'WAFFE-Knopf = Waffe wechseln',
@@ -1165,6 +1590,36 @@ function drawMenu() {
   ];
   const ls = mouse.touch ? 24 : 17, lh = mouse.touch ? 34 : 26;
   lines.forEach((l, i) => txt(l, W / 2, 500 + i * lh, ls, '#fff8e0'));
+}
+
+function wrapText(str, n) {
+  const lines = []; let cur = '';
+  for (const w of str.split(' ')) {
+    if ((cur + ' ' + w).trim().length > n && cur) { lines.push(cur); cur = w; } else cur = (cur + ' ' + w).trim();
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+function eggCard(e, x, y, w, h) {
+  const found = progress.eggs.includes(e.id);
+  ctx.fillStyle = found ? 'rgba(255,233,168,0.95)' : 'rgba(60,40,60,0.85)'; rrect(ctx, x, y, w, h, 12); ctx.fill();
+  ctx.strokeStyle = found ? '#3b1600' : '#ff90e0'; ctx.lineWidth = 3; ctx.stroke();
+  txt(found ? e.name : '???', x + 14, y + 20, 20, found ? '#3b1600' : '#ffffff', 'left', null);
+  const n = Math.max(12, Math.floor((w - 28) / 8.2));
+  wrapText(found ? e.desc : e.hint, n).slice(0, 3).forEach((l, i) => txt(l, x + 14, y + 44 + i * 15, 13, found ? '#5c0008' : '#ffd0f0', 'left', null));
+}
+function drawAlbum() {
+  ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(0, 0, W, H);
+  txt('GEHEIMNISSE', W / 2, 52, 52, '#ff90e0', 'center', '#3b0030');
+  txt(`ENTDECKT: ${progress.eggs.length} / ${EGGS.length}`, W / 2, 100, 22, '#fff');
+  const gap = 14, total = Math.min(W - 40, 1400), cw = (total - gap * 2) / 3, x0 = W / 2 - total / 2;
+  WORLDS.forEach((w, ci) => {
+    const x = x0 + ci * (cw + gap);
+    txt(w.name, x + cw / 2, 132, 20, '#ffe9a8');
+    EGGS.filter(e => e.world === w.id).forEach((e, ri) => eggCard(e, x, 150 + ri * 94, cw, 86));
+  });
+  EGGS.filter(e => e.world === 'all').forEach((e, i) => eggCard(e, x0, 530 + i * 70, total, 62));
+  button('ZURÜCK', W / 2 - 150, 618, 300, 56, () => { G.state = 'menu'; }, '#ffe9a8');
 }
 
 function drawWorlds() {
@@ -1271,9 +1726,25 @@ cv.addEventListener('pointercancel', release);
 window.addEventListener('blur', release);
 cv.addEventListener('contextmenu', e => e.preventDefault());
 cv.addEventListener('wheel', e => { e.preventDefault(); cycleWeapon(e.deltaY > 0 ? 1 : -1); }, { passive: false });
+function toggleBighead() {
+  Settings.bighead = !Settings.bighead; store.set('bighead', Settings.bighead);
+  popText(W / 2, 260, Settings.bighead ? 'RIESENKÖPFE AN!' : 'RIESENKÖPFE AUS', '#ffd83a', 40, 2);
+  Snd.voice('squawk', 0.8, 0.15);
+  discover('gack');
+}
+function titleTap() {
+  const now = performance.now();
+  G.titleTaps = G.titleTaps.filter(t => now - t < 2000);
+  G.titleTaps.push(now);
+  if (G.titleTaps.length >= 4) { G.titleTaps = []; toggleBighead(); }
+}
 window.addEventListener('keydown', e => {
   Snd.init();
   const k = e.key.toLowerCase();
+  if (k.length === 1 && G.state !== 'play') {
+    G.keyBuf = (G.keyBuf + k).slice(-4);
+    if (G.keyBuf === 'gack') { G.keyBuf = ''; toggleBighead(); }
+  }
   if (k === 'r' || k === ' ') { e.preventDefault(); reload(); }
   else if (k === '1' || k === '2' || k === '3') switchWeapon(WEAPON_ORDER[+k - 1]);
   else if (k === 'q') cycleWeapon(1);

@@ -7,8 +7,37 @@ const DEF_HEAD = [14, -58], DEF_BODY = [0, -30, 37, 32];
 const BLOODS = {
   red: ['#b3000f', '#d0021b', '#8a000c', '#e3102a', '#9e0010'],
   green: ['#3fbf3f', '#7dff4a', '#2a8a2a', '#a0ff70', '#2a8a2a'],
+  yolk: ['#ffd83a', '#ffa020', '#e8820c', '#fff3a0', '#ffffff'],
+  rubber: ['#ffe600', '#ffa020', '#d9a000', '#fff8a0', '#ff70b0'],
 };
 const CONFETTI = ['#ff4d6d', '#ffd23f', '#3bceac', '#4361ee', '#f77f00', '#c77dff'];
+
+/* ---------------------------------------------------------------- Easter Eggs */
+const EGGS = [
+  { id: 'barn',    world: 'farm',  name: 'SCHEUNEN-LAWINE', hint: 'Was versteckt sich wohl in der Scheune?', desc: '5x aufs Scheunentor schießen' },
+  { id: 'silo',    world: 'farm',  name: 'KÖRNER-REGEN',    hint: 'Das Silo ist randvoll …',                 desc: '6x aufs Silo schießen' },
+  { id: 'sun',     world: 'farm',  name: 'SONNENUNTERGANG', hint: 'Die Sonne blendet ganz schön …',          desc: '10x auf die Sonne – doppelte Punkte' },
+  { id: 'cloud',   world: 'farm',  name: 'EIER-REGEN',      hint: 'Eine Wolke sieht seltsam schwer aus …',   desc: '3x die graue Wolke treffen' },
+  { id: 'pike',    world: 'pond',  name: 'DER HECHT',       hint: 'Unter den Seerosen lauert etwas …',       desc: '3x auf dieselbe Seerose schießen' },
+  { id: 'dock',    world: 'pond',  name: 'ANGLER-PECH',     hint: 'Da sitzt doch jemand auf dem Steg …',     desc: 'Auf den Steg schießen' },
+  { id: 'rubber',  world: 'pond',  name: 'BOSS-GUMMIENTE',  hint: 'Manche Enten quietschen nur …',           desc: 'Die Gummiente 10x treffen' },
+  { id: 'monster', world: 'pond',  name: 'SEEUNGEHEUER',    hint: 'Wer im Teich wütet, weckt etwas Altes …', desc: '40 Abschüsse in einer Teich-Runde' },
+  { id: 'nova',    world: 'space', name: 'SUPERNOVA',       hint: 'Der Ringplanet wirkt etwas instabil …',   desc: '10x den Ringplaneten treffen' },
+  { id: 'earth',   world: 'space', name: 'ERDE GESPRENGT',  hint: 'Bitte nicht auf die Erde schießen!',      desc: '3x auf die Erde schießen' },
+  { id: 'lander',  world: 'space', name: 'ABHEBEN!',        hint: 'Die Landefähre ist noch startklar …',     desc: 'Auf die Landefähre schießen' },
+  { id: 'star',    world: 'space', name: 'WUNSCH FREI',     hint: 'Wünsch dir was!',                         desc: 'Eine Sternschnuppe abschießen' },
+  { id: 'gack',    world: 'all',   name: 'RIESENKÖPFE',     hint: 'Im Menü das Geräusch eines Huhns eintippen …', desc: 'Im Menü GACK tippen (Handy: 4x schnell auf den Titel)' },
+];
+const farmDoor = () => ({ x: W * 0.09 + 40, y: HORIZON() + 2 - 50, w: 40, h: 50 });
+const planetPos = () => ({ x: W * 0.2, y: 120, r: 58 });
+const pondPads = [];   // wird beim Zeichnen des Teichs gefüllt
+const siloRect = () => ({ x: W * 0.09 + 124, y: HORIZON() + 2 - 120, w: 38, h: 120 });
+const farmSun = () => ({ x: W * 0.82, y: 105, r: 46 });
+const dockRect = () => ({ x: W * 0.72 - 4, y: HORIZON() - 34, w: 178, h: 60 });
+const earthPos = () => ({ x: W * 0.84, y: 90, r: 30 });
+const landerPos = () => ({ x: W * 0.62, y: HORIZON() + 14 });
+const CLOUD_PUFFS = [[0, 0, 26], [28, -14, 34], [62, -4, 28], [34, 8, 28], [-20, 8, 18], [86, 8, 18]];
+const cloudHit = (c, px, py) => CLOUD_PUFFS.some(([ox, oy, r]) => (px - c.x - ox * c.s) ** 2 + (py - c.y - oy * c.s) ** 2 < (r * c.s) ** 2);
 
 /* ---------------------------------------------------------------- Gegnertypen */
 const def = o => Object.assign({
@@ -32,6 +61,17 @@ const TYPES = {
   goldduck: def({ speed: [190, 250], pts: 100, size: 0.8, col: '#ffc81a', dk: '#a8740a', lt: '#fff09a', swim: true, bill: 'duck', hat: 'crown', gold: true, voice: 'quack', legs: false }),
   swan:     def({ speed: [35, 55], hp: 4, pts: 80, size: 1.5, col: '#fbfbf8', dk: '#b8b8b0', lt: '#ffffff', swim: true, bill: 'swan', neck: true, head: [30, -92], tuft: false, voice: 'honk', big: 1.8, legs: false, extra: ['body', 'wing'] }),
   mine:     def({ speed: [45, 70], pts: 15, swim: true, bill: 'duck', bomb: 'mine', voice: 'quack', legs: false }),
+
+  angler:   def({ speed: [25, 45], pts: 150, swim: true, hat: 'fisher', legs: false, voice: 'squawk' }),
+  rubber:   def({ speed: [40, 70], hp: 99, pts: 500, col: '#ffe600', dk: '#d9a000', lt: '#fff8a0', swim: true, bill: 'duck', rubber: true, tuft: false, legs: false, voice: 'squeak', blood: 'rubber' }),
+  monster:  def({ kind: 'monster', monster: true, swim: true, speed: [0, 0], hp: 6, pts: 1000, size: 2.4, col: '#3f8f7a', dk: '#1f4a3a', lt: '#94d0a0', voice: 'roar',
+                  head: [36, -112], hr: 17, body: [6, -55, 20, 52], noHead: true, pieces: ['body', 'body', 'body', 'body', 'eye', 'fin', 'fin'], big: 2.2, legs: false }),
+  egg:      def({ kind: 'egg', fall: true, speed: [0, 0], pts: 15, col: '#fbfbf5', dk: '#c8c8c0', lt: '#ffffff', blood: 'yolk', head: [0, -14], hr: 0.01, body: [0, -14, 13, 17],
+                  noHead: true, pieces: ['shell', 'shell', 'shell', 'leg', 'wing', 'eye'], legs: false }),
+  lander:   def({ kind: 'lander', rocket: true, speed: [0, 0], pts: 300, size: 1.8, col: '#c8c8d0', dk: '#606070', lt: '#ffffff', head: [0, -18], hr: 8, body: [0, -14, 24, 18],
+                  bomb: 'rocket', pieces: ['metal', 'metal', 'metal', 'eye', 'body'], legs: false, voice: 'none' }),
+  pike:     def({ kind: 'fish', leap: true, speed: [0, 0], pts: 200, size: 1.6, col: '#6a8a5a', dk: '#34502a', lt: '#d8e0c0', legs: false, voice: 'none',
+                  body: [0, 0, 46, 16], head: [36, -2], hr: 15, noHead: true, pieces: ['body', 'body', 'body', 'eye', 'eye', 'fin', 'fin', 'fin'], big: 1.3, fishBonus: true }),
 
   // --- Weltraum
   alien:     def({ speed: [60, 100], pts: 15, col: '#8fff5a', dk: '#3a9a2a', lt: '#d8ffb0', hat: 'antenna', tuft: false, lowGrav: true, hop: 1.2, blood: 'green', voice: 'blip', bigEye: true }),
@@ -57,12 +97,12 @@ const WORLDS = [
       '#e8820c', '#ffa020', '#ffd83a', '#fff3a0',
       '#7a4cc0', '#40c0a0', '#ff70b0', '#3050e0',
     ],
-    bg: g => bgFarm(g), preview: ['#4fa6ee', '#93d057', '#b5302a'],
+    bg: (g, sunset) => bgFarm(g, sunset), preview: ['#4fa6ee', '#93d057', '#b5302a'],
   },
   {
     id: 'pond', name: 'TEICH', weapon: 'harpoon', need: 1500, sky: '#5aaee8', grav: 1500, gv: 1, water: true,
     desc: 'Entenküken, Frösche & Schwäne', parade: 'duckling',
-    weights: p => ({ duckling: 10, frog: 2 + 5 * p, flyduck: 1.5 + 4 * p, goldduck: 0.5, swan: 1 + 2 * p, mine: 0.9 + 2 * p }),
+    weights: p => ({ duckling: 10, frog: 2 + 5 * p, flyduck: 1.5 + 4 * p, goldduck: 0.5, swan: 1 + 2 * p, mine: 0.9 + 2 * p, rubber: 0.35 }),
     palette: [
       '#000000', '#14202a', '#2a3a20', '#5a4a2a', '#9a7a4a', '#d8c08a',
       '#ffffff', '#d0d8e0', '#8a96a0', '#4a5660',
@@ -103,19 +143,21 @@ function grassTufts(g, hz, n, cols) {
     g.stroke();
   }
 }
-function sun(g, sx, sy) {
+function sun(g, sx, sy, sunset) {
   const gr = g.createRadialGradient(sx, sy, 10, sx, sy, 190);
-  gr.addColorStop(0, 'rgba(255,250,210,0.85)'); gr.addColorStop(1, 'rgba(255,250,210,0)');
+  const glow = sunset ? '255,160,90' : '255,250,210';
+  gr.addColorStop(0, `rgba(${glow},0.85)`); gr.addColorStop(1, `rgba(${glow},0)`);
   g.fillStyle = gr; g.fillRect(sx - 200, sy - 200, 400, 400);
-  g.fillStyle = '#fff7c9'; circ(g, sx, sy, 46); g.fill();
+  g.fillStyle = sunset ? '#ffa020' : '#fff7c9'; circ(g, sx, sy, 46); g.fill();
 }
 
-function bgFarm(g) {
+function bgFarm(g, sunset) {
   const hz = HORIZON();
   let gr = g.createLinearGradient(0, 0, 0, hz);
-  gr.addColorStop(0, '#4fa6ee'); gr.addColorStop(1, '#c6eaff');
+  if (sunset) { gr.addColorStop(0, '#5a2a6a'); gr.addColorStop(0.55, '#c0506a'); gr.addColorStop(1, '#ffd0a0'); }
+  else { gr.addColorStop(0, '#4fa6ee'); gr.addColorStop(1, '#c6eaff'); }
   g.fillStyle = gr; g.fillRect(0, 0, W, hz + 2);
-  sun(g, W * 0.82, 105);
+  sun(g, W * 0.82, 105, sunset);
 
   g.fillStyle = '#a5d67f';
   g.beginPath(); g.moveTo(0, hz);
@@ -199,9 +241,11 @@ function bgPond(g) {
     g.fillStyle = Math.random() < 0.7 ? 'rgba(200,235,255,0.55)' : 'rgba(255,255,255,0.8)';
     g.fillRect(tx, ty, 6 + f * 30, 1 + f * 2);
   }
-  // Seerosenblätter
+  // Seerosenblätter (Positionen fürs Hecht-Easter-Egg merken)
+  pondPads.length = 0;
   for (let i = 0; i < 28; i++) {
-    const ty = rand(hz + 30, H - 10), f = (ty - hz) / (H - hz), tx = rand(0, W), r = 6 + f * 26;
+    const ty = rand(hz + 30, H - 10), f = (ty - hz) / (H - hz), tx = rand(140, W - 140), r = 6 + f * 26;
+    pondPads.push({ x: tx, y: ty, r });
     g.fillStyle = pick(['#3a7a22', '#5ea832']);
     g.beginPath(); g.ellipse(tx, ty, r, r * 0.32, 0, 0.3, TAU - 0.1); g.lineTo(tx, ty); g.closePath(); g.fill();
     if (Math.random() < 0.3) { g.fillStyle = '#ffb3d1'; circ(g, tx + r * 0.2, ty - r * 0.15, r * 0.22); g.fill(); }
@@ -241,11 +285,6 @@ function bgSpace(g) {
   g.fillStyle = '#e8820c'; g.fillRect(px - 56, py - 18, 112, 10); g.fillRect(px - 50, py + 12, 100, 8);
   g.strokeStyle = '#fff3a0'; g.lineWidth = 5; ell(g, px, py, 105, 22, -0.25); g.stroke();
   g.fillStyle = '#c08040'; g.beginPath(); g.arc(px, py, 58, Math.PI + 0.3, TAU - 0.5); g.fill();
-  // Erde
-  const ex = W * 0.84, ey = 90;
-  g.fillStyle = '#3f7fd8'; circ(g, ex, ey, 30); g.fill();
-  g.fillStyle = '#3fbf3f'; ell(g, ex - 8, ey - 6, 12, 8); g.fill(); ell(g, ex + 10, ey + 10, 9, 6); g.fill();
-  g.fillStyle = 'rgba(0,0,0,0.45)'; g.beginPath(); g.arc(ex, ey, 30, -1.2, 1.9); g.fill();
 
   // Mondgebirge
   g.fillStyle = '#3a3a48';
@@ -273,8 +312,34 @@ function bgSpace(g) {
   g.strokeStyle = '#c8c8d0'; g.lineWidth = 3;
   g.beginPath(); g.moveTo(lx - 22, ly); g.lineTo(lx - 12, ly - 20); g.moveTo(lx + 22, ly); g.lineTo(lx + 12, ly - 20); g.stroke();
   g.fillStyle = '#ffd83a'; g.fillRect(lx - 16, ly - 34, 32, 18);
+}
+function drawEarth(g) {
+  const { x: ex, y: ey } = earthPos();
+  g.fillStyle = '#3f7fd8'; circ(g, ex, ey, 30); g.fill();
+  g.fillStyle = '#3fbf3f'; ell(g, ex - 8, ey - 6, 12, 8); g.fill(); ell(g, ex + 10, ey + 10, 9, 6); g.fill();
+  g.fillStyle = 'rgba(0,0,0,0.45)'; g.beginPath(); g.arc(ex, ey, 30, -1.2, 1.9); g.fill();
+}
+function drawLanderTop(g) {
+  const { x: lx, y: ly } = landerPos();
   g.fillStyle = '#c8c8d0'; g.fillRect(lx - 10, ly - 48, 20, 14);
   g.fillStyle = '#40e0ff'; g.fillRect(lx - 5, ly - 44, 10, 5);
+}
+
+// Nach der Supernova: Planet verschwindet, ein leuchtender Nebel bleibt
+function drawNovaRemnant(g, t) {
+  const P = planetPos(), hz = HORIZON();
+  const gr = g.createLinearGradient(0, 0, 0, hz);
+  gr.addColorStop(0, '#05051a'); gr.addColorStop(1, '#2e1f5e');
+  g.fillStyle = gr; circ(g, P.x, P.y, 118); g.fill();
+  for (let i = 0; i < 3; i++) {
+    const r = 70 + i * 28 + Math.sin(t * 1.5 + i) * 6;
+    const ng = g.createRadialGradient(P.x, P.y, r * 0.3, P.x, P.y, r);
+    ng.addColorStop(0, 'rgba(0,0,0,0)');
+    ng.addColorStop(0.7, ['rgba(255,64,192,0.35)', 'rgba(64,224,255,0.3)', 'rgba(255,160,32,0.25)'][i]);
+    ng.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = ng; circ(g, P.x, P.y, r); g.fill();
+  }
+  g.fillStyle = '#ffffff'; circ(g, P.x, P.y, 4 + Math.sin(t * 9) * 1.5); g.fill();
 }
 
 /* ---------------------------------------------------------------- Ambiente (Wolken, Sterne …) */
@@ -283,6 +348,7 @@ function ambInit(world) {
   amb.clouds = []; amb.stars = []; amb.shoot = [];
   const nc = world.id === 'farm' ? 7 : world.id === 'pond' ? 4 : 0;
   for (let i = 0; i < nc; i++) amb.clouds.push({ x: rand(0, W), y: rand(30, H * 0.3), s: rand(0.6, 1.4), v: rand(6, 18) });
+  if (world.id === 'farm') amb.clouds[0].rain = true;
   if (world.id === 'space') for (let i = 0; i < 40; i++) amb.stars.push({ x: rand(0, W), y: rand(0, HORIZON() - 40), ph: rand(0, TAU), sp: rand(1, 4) });
 }
 function ambUpdate(dt, world) {
@@ -299,9 +365,9 @@ function ambUpdate(dt, world) {
   }
 }
 function ambDraw() {
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
   for (const c of amb.clouds) {
-    for (const [ox, oy, r] of [[0, 0, 26], [28, -14, 34], [62, -4, 28], [34, 8, 28], [-20, 8, 18], [86, 8, 18]]) {
+    ctx.fillStyle = c.rain ? 'rgba(160,165,180,0.95)' : 'rgba(255,255,255,0.92)';
+    for (const [ox, oy, r] of CLOUD_PUFFS) {
       circ(ctx, c.x + ox * c.s, c.y + oy * c.s, r * c.s); ctx.fill();
     }
   }
@@ -374,6 +440,11 @@ function drawHead(g, T, col, dk, t, dead) {
     g.fillStyle = '#ffd23f'; g.fillRect(-2, -32, 4, 8);
     const w = 20 * Math.abs(Math.cos(t * 40));
     g.fillStyle = '#4361ee'; ell(g, 0, -32, w, 3); g.fill();
+  }
+  if (T.hat === 'fisher') {
+    g.fillStyle = '#3a7a22'; ell(g, 0, -14, 24, 6); g.fill();
+    rrect(g, -13, -31, 26, 18, 7); g.fill();
+    g.fillStyle = '#9a6a3a'; g.fillRect(-13, -18, 26, 4);
   }
   if (T.hat === 'crown') {
     g.fillStyle = '#ffe066'; g.strokeStyle = '#a8740a'; g.lineWidth = 1.5;
@@ -466,6 +537,7 @@ function drawChickBody(g, c, T) {
   if (T.saucer) drawSaucer(g, c.t);
   if (T.bomb === 'mine') drawMine(g, c.t);
   g.save(); g.translate(hx, hy); g.rotate(pk * 0.6);
+  if (Settings.bighead) g.scale(1.7, 1.7);
   drawHead(g, T, col, dk, c.t, false);
   if (T.helmet && c.helmet) {
     g.fillStyle = 'rgba(180,230,255,0.3)'; circ(g, 4, -2, 27); g.fill();
@@ -511,9 +583,91 @@ function drawFrog(c, T) {
   g.restore();
 }
 
+function drawFish(c, T) {
+  const s = c.s, g = ctx, fl = c.flash > 0;
+  const col = fl ? '#ff8080' : T.col, dk = fl ? '#b03030' : T.dk, lt = T.lt;
+  g.save(); g.translate(c.x, c.y); g.scale(s * c.dir, s); g.rotate(c.ang || 0);
+  g.lineJoin = 'round';
+  g.fillStyle = dk;   // Schwanzflosse, Rückenflosse
+  g.beginPath(); g.moveTo(-40, 0); g.lineTo(-64, -16); g.lineTo(-58, 0); g.lineTo(-64, 16); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(-18, -12); g.lineTo(-30, -26); g.lineTo(-4, -14); g.closePath(); g.fill();
+  g.fillStyle = col; g.strokeStyle = dk; g.lineWidth = 2.5;
+  ell(g, 0, 0, 46, 15); g.fill(); g.stroke();
+  g.fillStyle = lt; ell(g, 4, 6, 36, 7); g.fill();
+  g.fillStyle = 'rgba(52,80,42,0.6)';
+  for (let i = -3; i <= 2; i++) { ell(g, i * 11, -4, 3, 8); g.fill(); }
+  // offenes Maul mit Zähnen
+  g.fillStyle = '#5c0008';
+  g.beginPath(); g.moveTo(48, -3); g.lineTo(30, 2); g.lineTo(48, 9); g.closePath(); g.fill();
+  g.fillStyle = '#ffffff';
+  for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(34 + i * 4, 0); g.lineTo(36 + i * 4, 4); g.lineTo(38 + i * 4, 1); g.fill(); }
+  g.fillStyle = '#ffd83a'; circ(g, 32, -6, 4.5); g.fill();
+  g.fillStyle = '#1a1a1a'; circ(g, 33, -6, 2.2); g.fill();
+  g.restore();
+}
+
+function drawEgg(c, T) {
+  const s = c.s, g = ctx;
+  g.fillStyle = 'rgba(0,0,0,0.2)'; ell(g, c.x, c.gy, 12 * s, 3 * s); g.fill();
+  g.save(); g.translate(c.x, c.y); g.scale(s, s); g.rotate(Math.sin(c.rot || 0) * 0.4);
+  g.fillStyle = c.flash > 0 ? '#ffb0b0' : T.col; g.strokeStyle = T.dk; g.lineWidth = 2;
+  ell(g, 0, -14, 12, 16); g.fill(); g.stroke();
+  g.fillStyle = '#d8d0c0'; circ(g, -4, -20, 2); g.fill(); circ(g, 4, -10, 1.6); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.8)'; ell(g, -5, -20, 3, 5); g.fill();
+  g.restore();
+}
+function drawMonster(c, T) {
+  const s = c.s, g = ctx, fl = c.flash > 0;
+  const col = fl ? '#ff8080' : T.col, dk = fl ? '#b03030' : T.dk;
+  g.save(); g.translate(c.x, c.y); g.scale(s * c.dir, s);
+  g.beginPath(); g.rect(-220, -320, 440, 320); g.clip(); g.translate(0, c.yoff || 0);
+  g.fillStyle = col; g.strokeStyle = dk; g.lineWidth = 3;
+  ell(g, -64, 4, 28, 22); g.fill(); g.stroke();
+  ell(g, -118, 8, 20, 15); g.fill(); g.stroke();
+  for (const [cl, lw] of [[dk, 26], [col, 20]]) {
+    g.strokeStyle = cl; g.lineWidth = lw; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-14, 6); g.quadraticCurveTo(12, -50, 28, -104); g.stroke();
+  }
+  g.fillStyle = T.lt; for (let i = 0; i < 4; i++) { circ(g, 6 + i * 5, -14 - i * 22, 4); g.fill(); }
+  g.fillStyle = col; g.strokeStyle = dk; g.lineWidth = 3;
+  ell(g, 38, -112, 22, 14, -0.15); g.fill(); g.stroke();
+  g.fillStyle = dk; g.beginPath(); g.moveTo(28, -124); g.lineTo(24, -138); g.lineTo(34, -126); g.fill();
+  g.beginPath(); g.moveTo(40, -125); g.lineTo(40, -139); g.lineTo(47, -124); g.fill();
+  g.fillStyle = '#fff3a0'; circ(g, 44, -116, 5); g.fill();
+  g.fillStyle = '#1a1a1a'; circ(g, 46, -116, 2.5); g.fill();
+  g.strokeStyle = dk; g.lineWidth = 2; g.beginPath(); g.moveTo(40, -104); g.lineTo(60, -108); g.stroke();
+  g.restore();
+  if ((c.yoff || 0) < 130) {
+    g.strokeStyle = 'rgba(220,240,255,0.85)'; g.lineWidth = 2 + s;
+    ell(g, c.x, c.y, 60 * s, 9 * s); g.stroke();
+    ell(g, c.x - 64 * s * c.dir, c.y + 2, 34 * s, 6 * s); g.stroke();
+  }
+}
+function drawLander(c, T) {
+  const s = c.s, g = ctx;
+  g.save(); g.translate(c.x, c.y); g.scale(s, s);
+  if (c.rt > 0) {
+    const fl = 26 + Math.random() * 18;
+    g.fillStyle = '#ffa020'; g.beginPath(); g.moveTo(-10, 0); g.lineTo(10, 0); g.lineTo(0, fl); g.closePath(); g.fill();
+    g.fillStyle = '#fff3a0'; g.beginPath(); g.moveTo(-5, 0); g.lineTo(5, 0); g.lineTo(0, fl * 0.6); g.closePath(); g.fill();
+  }
+  g.fillStyle = c.flash > 0 ? '#ff8080' : T.col; g.strokeStyle = T.dk; g.lineWidth = 2.5;
+  rrect(g, -22, -30, 44, 30, 6); g.fill(); g.stroke();
+  g.fillStyle = '#40e0ff'; g.fillRect(-12, -25, 24, 13);
+  g.fillStyle = '#ffd83a'; circ(g, 0, -17, 6); g.fill();
+  g.fillStyle = '#1a1a1a'; circ(g, 2, -18, 1.6); g.fill();
+  g.strokeStyle = T.dk; g.lineWidth = 2; g.beginPath(); g.moveTo(10, -30); g.lineTo(16, -42); g.stroke();
+  g.fillStyle = '#ff4a4a'; circ(g, 16, -43, 2.5); g.fill();
+  g.restore();
+}
+
 function drawEnemy(c) {
   const T = TYPES[c.type], s = c.s, g = ctx;
   if (T.kind === 'frog') return drawFrog(c, T);
+  if (T.kind === 'fish') return drawFish(c, T);
+  if (T.kind === 'egg') return drawEgg(c, T);
+  if (T.kind === 'monster') return drawMonster(c, T);
+  if (T.kind === 'lander') return drawLander(c, T);
   if (!T.swim) {
     const k = T.fly ? 0.6 : 1;
     g.fillStyle = 'rgba(0,0,0,0.22)';
@@ -589,6 +743,19 @@ function drawPiece(g, p) {
       g.fillStyle = '#4361ee'; ell(g, 0, 0, 20, 3); g.fill();
       g.fillStyle = '#ffd23f'; g.fillRect(-2, -2, 4, 8);
       break;
+    case 'shell':
+      g.fillStyle = '#fbfbf5'; g.strokeStyle = '#c8c8c0'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(-10, 0); g.lineTo(-6, -8); g.lineTo(0, -3); g.lineTo(6, -9); g.lineTo(10, 0); g.quadraticCurveTo(0, 8, -10, 0); g.fill(); g.stroke();
+      break;
+    case 'metal':
+      g.fillStyle = '#c8c8d0'; g.strokeStyle = '#606070'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(-12, -6); g.lineTo(10, -8); g.lineTo(13, 5); g.lineTo(-9, 8); g.closePath(); g.fill(); g.stroke();
+      break;
+    case 'fin':
+      g.fillStyle = p.dk;
+      g.beginPath(); g.moveTo(-10, -8); g.lineTo(12, 0); g.lineTo(-10, 8); g.closePath(); g.fill();
+      g.fillStyle = bc[0]; circ(g, -9, 0, 4); g.fill();
+      break;
     case 'saucer':
       g.fillStyle = '#9090a0'; g.strokeStyle = '#3a3a48'; g.lineWidth = 2;
       ell(g, 0, 0, 34, 9); g.fill(); g.stroke();
@@ -598,6 +765,7 @@ function drawPiece(g, p) {
   g.restore();
 }
 function piecesFor(T) {
+  if (T.pieces) return T.pieces;
   const base = T.kind === 'frog' ? ['leg', 'leg', 'leg', 'leg', 'eye', 'eye', 'body', 'body'] : ['leg', 'leg', 'wing', 'wing', 'eye', 'body', 'body'];
   return T.extra ? base.concat(T.extra) : base;
 }

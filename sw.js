@@ -1,5 +1,5 @@
 // Offline-Cache für Chicken Blast. Bei Änderungen am Spiel VERSION erhöhen.
-const VERSION = 'chickenblast-v3';
+const VERSION = 'chickenblast-v5';
 const FILES = [
   './',
   'index.html',

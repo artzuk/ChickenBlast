@@ -24,7 +24,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('chickenblast_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('chickenblast_' + k, JSON.stringify(v)); } catch (e) {} },
 };
-const Settings = { gore: store.get('gore', true), sound: store.get('sound', true) };
+const Settings = { gore: store.get('gore', true), sound: store.get('sound', true), bighead: store.get('bighead', false) };
 
 /* ---------------------------------------------------------------- Layout */
 let W = 1280, H = 720, K = 1, viewScale = 1;
@@ -183,6 +183,8 @@ const Snd = {
       case 'quack': this.tone('sawtooth', 560 * p, 380 * p, 0.11, vol * 1.6); this.tone('square', 540 * p, 360 * p, 0.1, vol * 0.8); break;
       case 'croak': this.tone('square', 150 * p, 95 * p, 0.12, vol * 1.6); this.tone('square', 140 * p, 90 * p, 0.14, vol * 1.6, 0.13); break;
       case 'honk': this.tone('sawtooth', 330 * p, 260 * p, 0.28, vol * 2.2); break;
+      case 'squeak': this.tone('square', 1700 * p, 2700 * p, 0.07, vol); this.tone('square', 2600 * p, 1500 * p, 0.09, vol, 0.07); break;
+      case 'roar': this.tone('sawtooth', 95, 55, 1.4, vol * 1.5); this.tone('sawtooth', 140, 70, 1.2, vol); this.nz(1.4, 'lowpass', 700, 90, vol * 2, 1); break;
       case 'blip': this.tone('sine', 700 * p, 1700 * p, 0.07, vol * 1.4); this.tone('square', 1400 * p, 500 * p, 0.08, vol * 0.6, 0.08); break;
     }
   },
@@ -192,6 +194,20 @@ const Snd = {
     this.tone('sine', 110, 24, 0.9, 1.0);
     this.nz(0.3, 'highpass', 3000, 1000, 0.5);
   },
+  nova() {
+    if (!this.ok()) return;
+    this.nz(3.5, 'lowpass', 5000, 40, 1.2, 0.5, 0.05);
+    this.tone('sine', 70, 18, 3, 1.0);
+    this.tone('sawtooth', 1800, 60, 2.2, 0.08, 0.1);
+    this.nz(2.5, 'bandpass', 3000, 200, 0.4, 2, 0.4);
+  },
+  rocket() {
+    if (!this.ok()) return;
+    this.nz(2.4, 'bandpass', 500, 2200, 0.7, 0.8);
+    this.nz(2.0, 'lowpass', 400, 80, 0.8, 0.7, 0.1);
+    this.tone('sine', 60, 40, 1.8, 0.5);
+  },
+  wish() { if (!this.ok()) return; [1318, 1568, 1976, 2637, 3136].forEach((f, i) => this.tone('sine', f, f, 0.4, 0.12, i * 0.07)); },
   ding() { if (!this.ok()) return; this.tone('triangle', 1318, 1318, 0.15, 0.25); this.tone('triangle', 1975, 1975, 0.35, 0.25, 0.09); },
   multi() { if (!this.ok()) return; [880, 1108, 1318, 1760].forEach((f, i) => this.tone('square', f, f, 0.09, 0.06, i * 0.05)); },
   fanfare() { if (!this.ok()) return; [523, 659, 784, 1046, 784, 1046].forEach((f, i) => this.tone('square', f, f, 0.14, 0.08, i * 0.11)); },
