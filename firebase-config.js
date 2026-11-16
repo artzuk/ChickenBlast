@@ -2,19 +2,16 @@
 /* =========================================================================
    Firebase-Konfiguration für die Bestenliste (siehe HIGHSCORE-SETUP.md).
    Diese Werte sind NICHT geheim – sie stehen bei jeder Firebase-Web-App im Client.
-   Solange FIREBASE_CONFIG null ist, läuft das Spiel normal, nur ohne Bestenliste.
+   Nur die Werte eintragen – KEIN import/initializeApp (das macht highscore.js).
    ========================================================================= */
-const FIREBASE_CONFIG = null;
-/* Beispiel:
 const FIREBASE_CONFIG = {
-  apiKey: 'AIza...',
-  authDomain: 'chickenblast-xxxx.firebaseapp.com',
-  projectId: 'chickenblast-xxxx',
-  storageBucket: 'chickenblast-xxxx.firebasestorage.app',
-  messagingSenderId: '123456789',
-  appId: '1:123456789:web:abcdef',
+  apiKey: 'AIzaSyB8cPRvppRgSkAYeEuJCsv6DnqaxQXnYLg',
+  authDomain: 'chickenblast-f2227.firebaseapp.com',
+  projectId: 'chickenblast-f2227',
+  storageBucket: 'chickenblast-f2227.firebasestorage.app',
+  messagingSenderId: '178949667086',
+  appId: '1:178949667086:web:22a10cc5d541c789227f5f',
 };
-*/
 
-// reCAPTCHA-v3-Site-Key für App Check. null = App Check aus.
-const RECAPTCHA_SITE_KEY = null;
+// reCAPTCHA-v3-Websiteschlüssel für App Check (der GEHEIME Schlüssel gehört nur in die Firebase-Console).
+const RECAPTCHA_SITE_KEY = '6LdT9yMuAAAAACdEnSA0P_YU9I-HfvfpN0NTH6dG';

@@ -35,7 +35,7 @@ Einmalig ca. 15 Minuten. Bis `firebase-config.js` ausgefüllt ist, läuft das Sp
 3. Firebase: **Build → App Check → Apps** → Web-App → **reCAPTCHA** → den **geheimen Schlüssel** eintragen.
 4. Ein, zwei Tage im Tab **APIs** die Messwerte beobachten. Wenn dort fast nur „verifizierte“ Anfragen stehen, für **Cloud Firestore** und **Authentication** auf **Erzwingen** klicken.
 
-**Lokal testen mit erzwungenem App Check:** Auf `localhost` schreibt das Spiel beim ersten Laden ein Debug-Token in die Browser-Konsole. Dieses Token unter **App Check → Apps → ⋮ → Debug-Tokens verwalten** eintragen.
+**Lokal testen:** Ist `localhost` bei reCAPTCHA eingetragen, funktioniert es dort wie live. Nur falls das nicht reicht (z. B. Zugriff über eine LAN-IP): in der Browser-Konsole `localStorage.setItem('chickenblast_appcheck_debug', '1')` ausführen und neu laden. Das Spiel schreibt dann ein Debug-Token in die Konsole. Dieses Token unter **App Check → Apps → ⋮ → Debug-Tokens verwalten** eintragen.
 
 ## Gut zu wissen
 

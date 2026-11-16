@@ -162,7 +162,8 @@ const HS = (() => {
         ]);
         const app = A.initializeApp(FIREBASE_CONFIG);
         if (AC) {
-          if (['localhost', '127.0.0.1'].includes(location.hostname)) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+          // Debug-Token nur auf Wunsch: localStorage.setItem('chickenblast_appcheck_debug', '1') und neu laden
+          if (store.get('appcheck_debug', 0)) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
           AC.initializeAppCheck(app, { provider: new AC.ReCaptchaV3Provider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
         }
         const auth = Au.getAuth(app), db = F.getFirestore(app);
