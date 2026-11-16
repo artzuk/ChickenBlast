@@ -28,11 +28,13 @@ Einmalig ca. 15 Minuten. Bis `firebase-config.js` ausgefüllt ist, läuft das Sp
    Der Aufbau dauert ein paar Minuten. Alternativ mit der Firebase-CLI im Projektordner:
    `firebase deploy --only firestore --project <projekt-id>` (setzt Rules und Indexe).
 
-## 4. App Check mit reCAPTCHA v3 (unsichtbar)
+## 4. App Check mit reCAPTCHA Enterprise (unsichtbar)
 
-1. <https://www.google.com/recaptcha/admin/create>: Typ **Punktebasiert (v3)**, Domains eintragen (deine Domain und `localhost`).
-2. Den **Websiteschlüssel** in [firebase-config.js](firebase-config.js) bei `RECAPTCHA_SITE_KEY` einsetzen.
-3. Firebase: **Build → App Check → Apps** → Web-App → **reCAPTCHA** → den **geheimen Schlüssel** eintragen.
+Das klassische reCAPTCHA v3 unterstützt App Check nicht mehr. Nötig ist reCAPTCHA Enterprise, das Google jetzt «Google Cloud Fraud Defense» nennt. Bis 10 000 Prüfungen pro Monat ist es gratis.
+
+1. Google Cloud Console → **Sicherheit → reCAPTCHA** (bzw. Fraud Defense) → Schlüssel für **Website** erstellen. Domains eintragen (deine Domain und `localhost`).
+2. Die **Schlüssel-ID** in [firebase-config.js](firebase-config.js) bei `RECAPTCHA_SITE_KEY` einsetzen.
+3. Firebase: **Build → App Check → Apps** → Web-App → **reCAPTCHA Enterprise** → die **Schlüssel-ID** eintragen. Ein geheimer Schlüssel wird nicht gebraucht.
 4. Ein, zwei Tage im Tab **APIs** die Messwerte beobachten. Wenn dort fast nur „verifizierte“ Anfragen stehen, für **Cloud Firestore** und **Authentication** auf **Erzwingen** klicken.
 
 **Lokal testen:** Ist `localhost` bei reCAPTCHA eingetragen, funktioniert es dort wie live. Nur falls das nicht reicht (z. B. Zugriff über eine LAN-IP): in der Browser-Konsole `localStorage.setItem('chickenblast_appcheck_debug', '1')` ausführen und neu laden. Das Spiel schreibt dann ein Debug-Token in die Konsole. Dieses Token unter **App Check → Apps → ⋮ → Debug-Tokens verwalten** eintragen.

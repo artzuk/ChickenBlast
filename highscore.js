@@ -164,7 +164,8 @@ const HS = (() => {
         if (AC) {
           // Debug-Token nur auf Wunsch: localStorage.setItem('chickenblast_appcheck_debug', '1') und neu laden
           if (store.get('appcheck_debug', 0)) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-          AC.initializeAppCheck(app, { provider: new AC.ReCaptchaV3Provider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
+          // reCAPTCHA Enterprise (Google Cloud Fraud Defense) – das klassische v3 unterstützt App Check nicht mehr
+          AC.initializeAppCheck(app, { provider: new AC.ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
         }
         const auth = Au.getAuth(app), db = F.getFirestore(app);
         if (self.FIREBASE_EMULATOR) {   // lokale Tests: window.FIREBASE_EMULATOR = true vor dem Laden setzen

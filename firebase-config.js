@@ -13,5 +13,5 @@ const FIREBASE_CONFIG = {
   appId: '1:178949667086:web:22a10cc5d541c789227f5f',
 };
 
-// reCAPTCHA-v3-Websiteschlüssel für App Check (der GEHEIME Schlüssel gehört nur in die Firebase-Console).
+// reCAPTCHA-Enterprise-Schlüssel-ID (Google Cloud Fraud Defense) für App Check. null = App Check aus.
 const RECAPTCHA_SITE_KEY = '6LdT9yMuAAAAACdEnSA0P_YU9I-HfvfpN0NTH6dG';
