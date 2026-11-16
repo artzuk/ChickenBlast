@@ -18,12 +18,15 @@ const SG_SCALE = 1.25;       // Größe der Flinte am Bildrand       // Perspekt
 /* ---------------------------------------------------------------- Zustand */
 const G = {
   state: 'menu', paused: false, t: 0, world: 0, weapon: 'shotgun',
-  score: 0, time: ROUND_TIME, elapsed: 0, ammo: { shotgun: 8, harpoon: 5 }, reload: 0, cool: 0, switchT: 0,
+  time: ROUND_TIME, elapsed: 0, ammo: { shotgun: 8, harpoon: 5 }, reload: 0, cool: 0, switchT: 0,
   heat: 0, over: false, firing: false, laserTick: 0, burst: null,
-  streak: 0, maxStreak: 0, kills: 0, shots: 0, hits: 0, heads: 0,
+  streak: 0, maxStreak: 0, shots: 0, hits: 0, heads: 0,
   spawnT: 0.5, shake: 0, flash: 0, recoil: 0, overT: 0, newBest: false, unlockedNew: null,
-  pending: [], shotT: 9, eject: false, egg: null, eggCool: 0, wish: 0, keyBuf: '', titleTaps: [],
+  pending: [], shotT: 9, eject: false, egg: null, eggCool: 0, wish: 0, keyBuf: '', titleTaps: [], hsTab: 'total',
 };
+// Punkte & Abschüsse liegen geschützt im Ledger (highscore.js). Nur über Ledger.add() ändern –
+// direktes Setzen (G.score = …) wird ignoriert und macht die Runde ungültig.
+for (const k of ['score', 'kills']) Object.defineProperty(G, k, { get: () => Ledger[k], set: () => Ledger.flag(), enumerable: true });
 const newEggState = () => ({
   door: 0, doorHit: 0, doorOpen: false, aval: 0, avalT: 0, pads: {}, nova: 0, novaHit: 0, novaDone: false, wave: -1,
   silo: 0, siloHit: 0, siloOpen: false, grainT: 0, peckT: 0, sun: 0, sunHit: 0, sunset: false, cloud: 0, eggRain: 0, eggT: 0, eggCloud: null, hatch: [],
@@ -31,8 +34,7 @@ const newEggState = () => ({
 });
 G.egg = newEggState();
 let chicks = [], parts = [], splats = [], slicks = [];
-const progress = { unlocked: store.get('unlocked', 0), best: {}, eggs: store.get('eggs', []) };
-for (const w of WORLDS) progress.best[w.id] = store.get('best_' + w.id, w.id === 'farm' ? store.get('best', 0) : 0);
+const progress = { ...HS.loadProgress(), eggs: store.get('eggs', []) };   // Rekorde & Freischaltung verschlüsselt
 const world = () => WORLDS[G.world];
 const weaponsUnlocked = () => WORLDS.filter((w, i) => i <= progress.unlocked).map(w => w.weapon);
 
@@ -107,11 +109,12 @@ function startGame(i = G.world) {
   stopLaser();
   if (i !== G.world) setWorld(i); else clearField();
   store.set('world', i);
+  Ledger.reset();
   Object.assign(G, {
-    state: 'play', paused: false, score: 0, time: ROUND_TIME, elapsed: 0,
+    state: 'play', paused: false, time: ROUND_TIME, elapsed: 0,
     ammo: { shotgun: WEAPONS.shotgun.ammo, harpoon: WEAPONS.harpoon.ammo }, reload: 0, cool: 0.2, switchT: 0,
     heat: 0, over: false, firing: false, burst: null, weapon: WORLDS[i].weapon,
-    streak: 0, maxStreak: 0, kills: 0, shots: 0, hits: 0, heads: 0, spawnT: 0.4, newBest: false, unlockedNew: null,
+    streak: 0, maxStreak: 0, shots: 0, hits: 0, heads: 0, spawnT: 0.4, newBest: false, unlockedNew: null,
     egg: newEggState(), eggCool: 0, wish: 0,
   });
   if (world().id === 'farm' && amb.clouds.length) { amb.clouds.forEach(c => { c.rain = false; }); amb.clouds[0].rain = true; }
@@ -119,13 +122,15 @@ function startGame(i = G.world) {
 function endGame() {
   stopLaser();
   G.state = 'over'; G.overT = 0;
-  const w = world();
-  if (G.score > progress.best[w.id]) { progress.best[w.id] = G.score; G.newBest = true; store.set('best_' + w.id, G.score); }
+  const w = world(), score = G.score, kills = G.kills, tampered = Ledger.tampered;
+  if (!tampered && score > progress.best[w.id]) { progress.best[w.id] = score; G.newBest = true; }
   const next = WORLDS[G.world + 1];
-  if (next && progress.unlocked < G.world + 1 && G.score >= next.need) {
-    progress.unlocked = G.world + 1; store.set('unlocked', progress.unlocked);
+  if (!tampered && next && progress.unlocked < G.world + 1 && score >= next.need) {
+    progress.unlocked = G.world + 1;
     G.unlockedNew = next; Snd.fanfare();
   }
+  HS.saveProgress(progress);
+  HS.roundEnd(w.id, score, kills, tampered);
 }
 
 /* ---------------------------------------------------------------- Spawnen */
@@ -390,7 +395,7 @@ function explode(x, y, s, z, kind) {
   const label = kind === 'plasma' ? 'ZAPPP!' : 'KABUMM!';
   if (G.state === 'play') {
     const pts = Math.round((total + 50 * n) * multiplier());
-    G.score += pts; G.kills += n;
+    Ledger.add(pts, n);
     popText(x, y - 80 * s, n > 0 ? `${label} +${pts}` : label, green ? '#7dff4a' : '#ffb347', 40, 1.4);
   } else popText(x, y - 80 * s, label, green ? '#7dff4a' : '#ffb347', 40, 1.2);
 }
@@ -618,7 +623,7 @@ function updateEggs(dt) {
     }
     if (n && G.state === 'play') {
       const add = Math.round(pts * multiplier());
-      G.score += add; G.kills += n;
+      Ledger.add(add, n);
       popText(clamp(P.x + E.wave * 0.7, 100, W - 100), clamp(P.y + E.wave * 0.5, 120, H - 120), '+' + add, '#fff3a0', 30, 1);
     }
     if (E.wave > 2600) E.wave = -1;
@@ -773,7 +778,7 @@ function triggerDown(px, py) {
 
 function finishShot(px, py, res, kind) {
   G.hits++; G.streak++; G.maxStreak = Math.max(G.maxStreak, G.streak);
-  G.kills += res.kills; G.heads += res.heads;
+  G.heads += res.heads;
   let total = res.total;
   if (res.kills >= 2) {
     total += 30 * res.kills * res.kills;
@@ -784,7 +789,7 @@ function finishShot(px, py, res, kind) {
     popText(px, py - 70, msg, '#ff4d6d', 40, 1.3);
   }
   const pts = Math.round(total * multiplier());
-  G.score += pts;
+  Ledger.add(pts, res.kills);
   popText(px, py - 30, '+' + pts, '#ffffff', 30, 0.9);
   if (G.streak % 5 === 0) popText(W / 2, 150, `COMBO x${multiplier().toFixed(1)}`, '#7dd3ff', 44, 1.2);
 }
@@ -924,7 +929,7 @@ function laserTick() {
     const r = damage(c, h === 'head');
     if (r.killed) {
       kills++; total += r.pts;
-      G.kills++; G.streak++; G.maxStreak = Math.max(G.maxStreak, G.streak);
+      G.streak++; G.maxStreak = Math.max(G.maxStreak, G.streak);
       if (h === 'head') { G.heads++; popText(c.x, headPos(c).y - 50 * c.s, 'KOPFSCHUSS!', '#ffe14d', 22, 0.9); }
       if (G.streak % 5 === 0) popText(W / 2, 150, `COMBO x${multiplier().toFixed(1)}`, '#7dd3ff', 44, 1.2);
       for (let j = 0; j < 6; j++) parts.push({ k: 'smoke', x: c.x, y: bodyPos(c).y, vx: rand(-40, 40), vy: rand(-80, -20), r: rand(6, 14) * c.s + 3, life: 0.8, max: 0.8 });
@@ -934,7 +939,7 @@ function laserTick() {
   if (G.burst) G.burst.kills += kills;
   if (kills >= 2) { total += 30 * kills * kills; Snd.multi(); popText(px, py - 70, kills === 2 ? 'DOPPELT!' : 'MASSAKER!', '#ff4d6d', 40, 1.3); }
   const pts = Math.round(total * multiplier());
-  G.score += pts;
+  Ledger.add(pts, kills);
   popText(px, py - 30, '+' + pts, '#ffffff', 30, 0.9);
 }
 
@@ -1411,6 +1416,7 @@ function render() {
   else if (G.state === 'worlds') drawWorlds();
   else if (G.state === 'album') drawAlbum();
   else if (G.state === 'help') drawHelp();
+  else if (G.state === 'scores') drawScores();
   else if (G.state === 'over') { drawHUD(); drawOver(); }
   if (G.paused) {
     buttons = [];
@@ -1605,8 +1611,9 @@ function drawMenu() {
   txt('Ballere in 90 Sekunden so viele Küken weg wie möglich!', W / 2, 250, 24, '#fff');
   const bw = 360, bx = W / 2 - bw / 2;
   button('SPIELEN', bx, 300, bw, 78, () => { G.state = 'worlds'; });
-  button('ANLEITUNG', W / 2 - 230, 398, 222, 56, () => { G.state = 'help'; }, '#ffe9a8');
-  button('GEHEIMNISSE', W / 2 + 8, 398, 222, 56, () => { G.state = 'album'; }, '#ff90e0');
+  button('ANLEITUNG', W / 2 - 345, 398, 222, 56, () => { G.state = 'help'; }, '#ffe9a8');
+  button('GEHEIMNISSE', W / 2 - 111, 398, 222, 56, () => { G.state = 'album'; }, '#ff90e0');
+  button('BESTENLISTE', W / 2 + 123, 398, 222, 56, () => { G.state = 'scores'; }, '#7dffb0');
   ghostButton(Settings.gore ? 'BLUT: VOLL' : 'BLUT: KONFETTI', bx + 40, 476, bw - 80, 46, () => { Settings.gore = !Settings.gore; store.set('gore', Settings.gore); });
   soundButton(W - 56, 52);
 }
@@ -1742,8 +1749,70 @@ function drawOver() {
       button('NOCHMAL', W / 2 - 300, 500, 280, 70, () => startGame(G.world), '#ffe9a8');
       button('NÄCHSTE WELT', W / 2 + 20, 500, 280, 70, () => startGame(G.world + 1));
     } else button('NOCHMAL', W / 2 - 160, 500, 320, 70, () => startGame(G.world));
-    ghostButton('MENÜ', W / 2 - 90, 600, 180, 48, () => { G.state = 'menu'; });
+    ghostButton('MENÜ', W / 2 - 220, 596, 180, 48, () => { G.state = 'menu'; });
+    const r = HS.round;
+    if (r && r.status === 'noname') ghostButton('EINTRAGEN', W / 2 - 20, 596, 240, 48, () => HS.nameDialog());
+    else ghostButton('BESTENLISTE', W / 2 - 20, 596, 240, 48, () => { G.hsTab = world().id; G.state = 'scores'; });
   }
+  drawRoundStatus(HS.round, 672);
+}
+// Zeile unter dem Ergebnis: Was ist mit dieser Runde in der Bestenliste passiert?
+function drawRoundStatus(r, y) {
+  if (!r) return;
+  const S = {
+    tampered: ['MANIPULIERT – RUNDE NICHT GEWERTET', '#ff5a5a'],
+    noname: ['WÄHLE EINEN NICKNAME FÜR DIE BESTENLISTE!', '#ffe14d'],
+    sending: ['WIRD EINGETRAGEN …', '#fff8e0'],
+    later: ['OFFLINE – WIRD SPÄTER EINGETRAGEN', '#ffe9a8'],
+    rejected: ['VOM SERVER NICHT ANGENOMMEN', '#ff5a5a'],
+    done: [r.rank ? `PLATZ ${r.rank} IN DER BESTENLISTE!` : 'IN DER BESTENLISTE EINGETRAGEN', '#7dffb0'],
+  }[r.status];
+  if (S) txt(S[0], W / 2, y, 20, S[1]);
+}
+
+/* ---------------------------------------------------------------- Bestenliste */
+const HS_TABS = [['total', 'GESAMT'], ...WORLDS.map(w => [w.id, w.name])];
+function drawScores() {
+  ctx.fillStyle = 'rgba(0,0,0,0.72)'; ctx.fillRect(0, 0, W, H);
+  txt('BESTENLISTE', W / 2, 46, 52, '#7dffb0', 'center', '#003b20');
+  const back = () => button('ZURÜCK', W / 2 - 150, 612, 300, 54, () => { G.state = 'menu'; }, '#ffe9a8');
+  if (!HS.configured) {
+    txt('Die Bestenliste ist noch nicht eingerichtet.', W / 2, 320, 24, '#fff');
+    back(); return;
+  }
+  const tw = 222, gap = 10, x0 = W / 2 - (HS_TABS.length * tw + (HS_TABS.length - 1) * gap) / 2;
+  HS_TABS.forEach(([id, label], i) => {
+    const x = x0 + i * (tw + gap);
+    if (id === G.hsTab) button(label, x, 86, tw, 48, () => {}, '#7dffb0');
+    else ghostButton(label, x, 86, tw, 48, () => { G.hsTab = id; });
+  });
+  // Tabelle
+  const pw = Math.min(W - 60, 860), px = W / 2 - pw / 2, py = 148, rh = 34;
+  ctx.fillStyle = 'rgba(255,233,168,0.95)'; rrect(ctx, px, py, pw, rh * 10 + 20, 14); ctx.fill();
+  ctx.strokeStyle = '#3b1600'; ctx.lineWidth = 3; ctx.stroke();
+  const b = HS.board(G.hsTab), mid = py + rh * 5 + 10;
+  if (!b.rows) {
+    const msg = b.status === 'offline' ? 'OFFLINE – KEINE VERBINDUNG' : b.status === 'error' ? 'KONNTE NICHT GELADEN WERDEN' : 'LADE …';
+    txt(msg, W / 2, mid, 24, '#5c0008', 'center', null);
+  } else if (!b.rows.length) {
+    txt('NOCH KEINE EINTRÄGE – SEI DER ERSTE!', W / 2, mid, 22, '#5c0008', 'center', null);
+  } else {
+    const medal = ['#c88a00', '#7a7a8a', '#a0522d'];
+    b.rows.forEach((r, i) => {
+      const y = py + 10 + i * rh + rh / 2;
+      if (r.mine) { ctx.fillStyle = 'rgba(125,255,176,0.75)'; rrect(ctx, px + 8, y - rh / 2 + 2, pw - 16, rh - 4, 8); ctx.fill(); }
+      txt(`${i + 1}.`, px + 70, y, 22, medal[i] || '#5c3a1a', 'right', null);
+      txt(r.name, px + 92, y, 22, '#3b1600', 'left', null);
+      txt(String(r.score), px + pw - 24, y, 22, '#3b1600', 'right', null);
+    });
+  }
+  // eigene Platzierung außerhalb der Top 10
+  if (b.me) txt(`DEIN BESTER: PLATZ ${b.me.rank}  ·  ${b.me.score} PUNKTE`, W / 2, 530, 20, '#7dffb0');
+  if (HS.name) txt('DEIN NAME: ' + HS.name, W / 2, 570, 20, '#ffe9a8');
+  else ghostButton('NICKNAME WÄHLEN', W / 2 - 160, 548, 320, 44, () => HS.nameDialog());
+  back();
+  const n = HS.pending;
+  txt((n ? `${n} RUNDE${n > 1 ? 'N' : ''} WARTE${n > 1 ? 'N' : 'T'} AUF UPLOAD  ·  ` : '') + 'Daten bei Google Firebase · geschützt durch reCAPTCHA', W / 2, 696, 13, 'rgba(255,248,224,0.7)', 'center', null);
 }
 
 let cursorMode = '';
@@ -1817,7 +1886,7 @@ window.addEventListener('keydown', e => {
   else if (k === '1' || k === '2' || k === '3') switchWeapon(WEAPON_ORDER[+k - 1]);
   else if (k === 'q') cycleWeapon(1);
   else if ((k === 'p' || k === 'escape') && G.state === 'play') { G.paused = !G.paused; stopLaser(); }
-  else if (k === 'escape' && (G.state === 'worlds' || G.state === 'album' || G.state === 'help')) G.state = 'menu';
+  else if (k === 'escape' && (G.state === 'worlds' || G.state === 'album' || G.state === 'help' || G.state === 'scores')) G.state = 'menu';
   else if (k === 'm') { Settings.sound = !Settings.sound; store.set('sound', Settings.sound); if (!Settings.sound) Snd.laserOff(); }
   else if (k === 'f') {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});

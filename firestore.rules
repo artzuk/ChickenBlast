@@ -1,0 +1,95 @@
+rules_version = '2';
+
+// Chicken Blast – Bestenliste
+//   players/{uid}  Nickname eines Geräts (anonymer Login), einmal anlegen, nie ändern
+//   scores/{id}    eine abgeschlossene Runde (nur anlegen, nie ändern/löschen)
+//   totals/{uid}   Gesamtscore eines Geräts = Summe der besten Runde je Welt
+// Ein Score wird immer zusammen mit totals/{uid} in EINEM Batch geschrieben; beide Regeln
+// prüfen sich gegenseitig (getAfter). Löschen geht nur über die Firebase-Console.
+//
+// WICHTIG: SECRET muss mit highscore.js übereinstimmen, die Welt-IDs mit worlds.js.
+
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function SECRET() { return 'e6tPqj8CCgyn9JL4VtBgHzix9MM5'; }
+    function signedIn() { return request.auth != null; }
+    function playerName() { return get(/databases/$(db)/documents/players/$(request.auth.uid)).data.name; }
+
+    // Nickname: 2–64 UTF-16-Einheiten (Client: 2–16 Zeichen), keine Steuer-/unsichtbaren Zeichen
+    // außer normalem Leerzeichen und Emoji-Verbinder (ZWJ), keine Zalgo-Stapel, kleine Sperrliste.
+    function nameOk(n) {
+      return n is string && n.size() >= 2 && n.size() <= 64
+        && n.matches('^(?:[^\\p{C}\\p{Z}\\x{2800}\\x{3164}\\x{115F}\\x{1160}\\x{FFA0}]|[ \\x{200D}])+$')
+        && !n.matches('^ .*|.* $|.*  .*')
+        && !n.matches('.*\\p{M}{3,}.*')
+        && !n.lower().matches('.*(hitler|nazi|sieg ?heil|heil ?hitler|1488|kkk|nigger|nigga|neger|kanake|schwuchtel|faggot|judensau|auschwitz).*');
+    }
+
+    match /players/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'created'])
+        && nameOk(request.resource.data.name)
+        && request.resource.data.created == request.time;
+      allow update, delete: if false;
+    }
+
+    match /scores/{id} {
+      allow read: if true;
+      allow create: if signedIn() && scoreOk(id, request.resource.data)
+        && getAfter(/databases/$(db)/documents/totals/$(request.auth.uid)).data.last == id
+        && getAfter(/databases/$(db)/documents/totals/$(request.auth.uid)).data.t == request.time;
+      allow update, delete: if false;
+
+      function scoreOk(id, d) {
+        return d.keys().hasOnly(['uid', 'name', 'world', 'score', 'kills', 'v', 'ts', 'sig'])
+          && d.keys().hasAll(['uid', 'name', 'world', 'score', 'kills', 'v', 'ts', 'sig'])
+          && d.uid == request.auth.uid
+          && d.name == playerName()
+          && d.world in ['farm', 'pond', 'space']
+          && d.v == 1
+          && d.ts == request.time
+          && d.score is int && d.score > 0 && d.score <= 1000000
+          && d.kills is int && d.kills >= 0 && d.kills <= 2000
+          // Plausibilität: grob, Easter Eggs (x2, Supernova, Monster) eingerechnet
+          && d.score <= d.kills * 2500 + 40000
+          // Signatur – hält REST-Aufrufe mit kopierter Firebase-Config ab
+          && d.sig is string
+          && d.sig == hashing.sha256(SECRET() + '|' + id + '|' + d.world + '|' + string(d.score) + '|' + string(d.kills) + '|' + string(d.v)).toHexString().lower();
+      }
+    }
+
+    match /totals/{uid} {
+      allow read: if true;
+      allow create, update: if signedIn() && request.auth.uid == uid && totalsOk(uid);
+      allow delete: if false;
+
+      // neuer Wert je Welt = max(alt, Score dieser Runde); andere Welten unverändert
+      function bestOk(n, o, s, w) {
+        return (s.world == w && ((s.score > o[w] && n[w] == s.score) || (s.score <= o[w] && n[w] == o[w])))
+          || (s.world != w && n[w] == o[w]);
+      }
+      function totalsOk(uid) {
+        let n = request.resource.data;
+        let o = resource == null ? {'farm': 0, 'pond': 0, 'space': 0} : resource.data;
+        let s = getAfter(/databases/$(db)/documents/scores/$(n.last)).data;
+        return n.keys().hasOnly(['name', 'farm', 'pond', 'space', 'total', 'last', 't', 'v'])
+          && n.keys().hasAll(['name', 'farm', 'pond', 'space', 'total', 'last', 't', 'v'])
+          && n.last is string
+          && n.name == playerName()
+          && n.v == 1
+          && n.t == request.time
+          && s.uid == uid && s.ts == request.time
+          // höchstens eine Runde pro 30 Sekunden (eine Runde dauert mindestens 90 s)
+          && (resource == null || request.time > resource.data.t + duration.value(30, 's'))
+          && bestOk(n, o, s, 'farm') && bestOk(n, o, s, 'pond') && bestOk(n, o, s, 'space')
+          && n.total == n.farm + n.pond + n.space;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

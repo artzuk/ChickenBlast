@@ -1,10 +1,12 @@
 // Offline-Cache für Chicken Blast. Bei Änderungen am Spiel VERSION erhöhen.
-const VERSION = 'chickenblast-v6';
+const VERSION = 'chickenblast-v7';
 const FILES = [
   './',
   'index.html',
   'core.js',
   'worlds.js',
+  'firebase-config.js',
+  'highscore.js',
   'game.js',
   'manifest.webmanifest',
   'fonts/PressStart2P-latin.woff2',
@@ -28,8 +30,12 @@ self.addEventListener('activate', e => {
 });
 
 // Netzwerk zuerst (damit Updates sofort ankommen), Cache als Fallback offline.
+// Fremde Server (Firebase-API, Login, reCAPTCHA) nie anfassen – nur eigene Dateien und das Firebase-SDK cachen.
+const SDK = 'https://www.gstatic.com/firebasejs/';
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  const url = e.request.url;
+  if (!url.startsWith(self.location.origin + '/') && !url.startsWith(SDK)) return;
   e.respondWith(
     fetch(e.request)
       .then(res => {
