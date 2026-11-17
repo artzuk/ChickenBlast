@@ -315,7 +315,7 @@ const HS = (() => {
           rows = s.docs.map(d => ({ name: d.data().name, score: d.data().total, mine: d.id === uid }));
         } else {
           const s = await F.getDocs(F.query(F.collection(db, 'scores'), F.where('world', '==', tab), F.orderBy('score', 'desc'), F.orderBy('ts', 'asc'), F.limit(10)));
-          rows = s.docs.map(d => ({ name: d.data().name, score: d.data().score, mine: d.data().uid === uid }));
+          rows = s.docs.map(d => ({ id: d.id, name: d.data().name, score: d.data().score, mine: d.data().uid === uid }));
         }
         if (uid && !rows.some(r => r.mine)) {
           const t = await F.getDoc(F.doc(db, 'totals', uid));

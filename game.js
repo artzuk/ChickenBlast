@@ -1491,7 +1491,7 @@ function drawHUD() {
   const tt = Math.ceil(G.time);
   const low = G.time <= 10 && G.state === 'play';
   const pulse = low ? 1 + 0.12 * Math.abs(Math.sin(G.t * 6)) : 1;
-  txt(`${Math.floor(tt / 60)}:${String(tt % 60).padStart(2, '0')}`, W / 2, 42, 46 * pulse, low ? '#ff5a5a' : '#fff');
+  if (G.state === 'play') txt(`${Math.floor(tt / 60)}:${String(tt % 60).padStart(2, '0')}`, W / 2, 42, 46 * pulse, low ? '#ff5a5a' : '#fff');
 
   if (G.wish > 0 && G.state === 'play') txt(`UNENDLICH FEUER ${Math.ceil(G.wish)}`, W / 2, 92, 20, `hsl(${(G.t * 300) % 360},100%,70%)`);
   if (G.egg.sunset && G.state === 'play' && world().id === 'farm') txt('x2 PUNKTE', W / 2, 92, 20, '#ffa020');
@@ -1730,44 +1730,78 @@ function drawOver() {
   const a = clamp(G.overT * 2, 0, 1);
   ctx.fillStyle = `rgba(20,0,0,${0.55 * a})`; ctx.fillRect(0, 0, W, H);
   ctx.globalAlpha = a;
-  txt('ZEIT UM!', W / 2, 120, 84, '#ffd83a', 'center', '#5c0008');
-  txt(String(G.score), W / 2, 210, 72, '#fff');
-  if (G.newBest && Math.sin(G.t * 8) > -0.4) txt('NEUER REKORD!', W / 2, 268, 34, '#7dffb0');
+  // Kopf: Punkte + Kurzstatistik
+  txt('ZEIT UM!', W / 2, 40, 50, '#ffd83a', 'center', '#5c0008');
+  txt(String(G.score), W / 2, 100, 64, '#fff');
+  if (G.newBest && Math.sin(G.t * 8) > -0.4) txt('NEUER REKORD!', W / 2 + 250, 100, 26, '#7dffb0');
   const acc = G.shots ? Math.round(G.hits / G.shots * 100) : 0;
-  const stats = [`Erledigt: ${G.kills}   Kopfschüsse: ${G.heads}`, `Trefferquote: ${acc}%   Längste Serie: ${G.maxStreak}`];
-  stats.forEach((s, i) => txt(s, W / 2, 315 + i * 34, 22, '#fff8e0'));
+  txt(`${G.kills} ERLEDIGT · ${G.heads} KOPFSCHÜSSE · ${acc}% TREFFER · SERIE ${G.maxStreak}`, W / 2, 148, 18, '#fff8e0');
   const next = WORLDS[G.world + 1];
   if (G.unlockedNew) {
     const p = 1 + 0.06 * Math.sin(G.t * 6);
-    txt(`NEUE WELT: ${G.unlockedNew.name}!`, W / 2, 410, 36 * p, '#7dffb0');
-    txt(`NEUE WAFFE: ${WEAPONS[G.unlockedNew.weapon].name}`, W / 2, 452, 24, '#a0f0ff');
+    txt(`NEUE WELT: ${G.unlockedNew.name}!  NEUE WAFFE: ${WEAPONS[G.unlockedNew.weapon].name}`, W / 2, 182, 24 * p, '#7dffb0');
   } else if (next && progress.unlocked < G.world + 1) {
-    txt(`${next.name} ab ${next.need} Punkten`, W / 2, 420, 24, '#ffe9a8');
+    txt(`${next.name} ab ${next.need} Punkten`, W / 2, 182, 20, '#ffe9a8');
   }
+  // Mitte: Bestenliste dieser Welt
+  drawRoundBoard(206, 368);
   ctx.globalAlpha = 1;
+  // Unten: weiter
   if (G.overT > 1) {
     const canNext = next && progress.unlocked >= G.world + 1;
     if (canNext) {
-      button('NOCHMAL', W / 2 - 300, 500, 280, 70, () => startGame(G.world), '#ffe9a8');
-      button('NÄCHSTE WELT', W / 2 + 20, 500, 280, 70, () => startGame(G.world + 1));
-    } else button('NOCHMAL', W / 2 - 160, 500, 320, 70, () => startGame(G.world));
-    ghostButton('MENÜ', W / 2 - 220, 596, 180, 48, () => { G.state = 'menu'; });
-    ghostButton('BESTENLISTE', W / 2 - 20, 596, 240, 48, () => { G.hsTab = world().id; G.state = 'scores'; });
+      button('NOCHMAL', W / 2 - 300, 590, 280, 64, () => startGame(G.world), '#ffe9a8');
+      button('NÄCHSTE WELT', W / 2 + 20, 590, 280, 64, () => startGame(G.world + 1));
+    } else button('NOCHMAL', W / 2 - 160, 590, 320, 64, () => startGame(G.world));
+    ghostButton('MENÜ', W / 2 - 220, 666, 180, 42, () => { G.state = 'menu'; });
+    ghostButton('ALLE LISTEN', W / 2 + 40, 666, 180, 42, () => { G.hsTab = world().id; G.state = 'scores'; });
   }
-  drawRoundStatus(HS.round, 672);
 }
-// Zeile unter dem Ergebnis: Was ist mit dieser Runde in der Bestenliste passiert?
-function drawRoundStatus(r, y) {
-  if (!r) return;
-  const S = {
-    tampered: ['MANIPULIERT – RUNDE NICHT GEWERTET', '#ff5a5a'],
-    noname: ['OHNE NICKNAME NICHT IN DER BESTENLISTE', '#ffe14d'],
-    sending: ['WIRD EINGETRAGEN …', '#fff8e0'],
-    later: ['OFFLINE – WIRD SPÄTER EINGETRAGEN', '#ffe9a8'],
-    rejected: ['VOM SERVER NICHT ANGENOMMEN', '#ff5a5a'],
-    done: [r.rank ? `PLATZ ${r.rank} IN DER BESTENLISTE!` : 'IN DER BESTENLISTE EINGETRAGEN', '#7dffb0'],
-  }[r.status];
-  if (S) txt(S[0], W / 2, y, 20, S[1]);
+// Bestenliste der gespielten Welt auf dem Ergebnis-Bildschirm, eigene Runde hervorgehoben
+function drawRoundBoard(y0, h) {
+  const pw = Math.min(W - 60, 760), px = W / 2 - pw / 2, rh = 30, r = HS.round;
+  ctx.fillStyle = 'rgba(255,233,168,0.95)'; rrect(ctx, px, y0, pw, h, 14); ctx.fill();
+  ctx.strokeStyle = '#3b1600'; ctx.lineWidth = 3; ctx.stroke();
+  txt('BESTENLISTE ' + world().name, W / 2, y0 + 22, 20, '#5c0008', 'center', null);
+  const status = roundStatus(r);
+  if (status) txt(status[0], W / 2, y0 + h - 20, 17, status[1], 'center', null);
+  const mid = y0 + h / 2;
+  if (!HS.configured) { txt('Bestenliste nicht eingerichtet', W / 2, mid, 20, '#5c3a1a', 'center', null); return; }
+  const b = HS.board(world().id);
+  if (!b.rows) {
+    txt(b.status === 'offline' ? 'OFFLINE' : b.status === 'error' ? 'KONNTE NICHT GELADEN WERDEN' : 'LADE …', W / 2, mid, 20, '#5c3a1a', 'center', null);
+    return;
+  }
+  if (!b.rows.length) { txt('NOCH KEINE EINTRÄGE', W / 2, mid, 20, '#5c3a1a', 'center', null); return; }
+  const SHOW = 8, thisId = r && r.id;
+  const inTop = b.rows.slice(0, SHOW).some(x => x.id === thisId);
+  const list = b.rows.slice(0, inTop || !(r && r.rank) ? SHOW : SHOW - 1).map((x, i) => ({ ...x, rank: i + 1 }));
+  if (!inTop && r && r.status === 'done' && r.rank) list.push({ id: thisId, name: HS.name, score: r.score, rank: r.rank, mine: true, gap: true });
+  const medal = ['#c88a00', '#7a7a8a', '#a0522d'];
+  list.forEach((x, i) => {
+    const y = y0 + 52 + i * rh + rh / 2 + (x.gap ? 12 : 0);
+    if (x.gap) txt('…', px + 64, y - rh / 2 - 4, 16, '#5c3a1a', 'right', null);
+    const cur = x.id === thisId;
+    if (cur || x.mine) {
+      ctx.fillStyle = cur ? (Math.sin(G.t * 5) > -0.3 ? 'rgba(125,255,176,0.95)' : 'rgba(125,255,176,0.6)') : 'rgba(125,255,176,0.35)';
+      rrect(ctx, px + 8, y - rh / 2 + 2, pw - 16, rh - 4, 8); ctx.fill();
+    }
+    txt(`${x.rank}.`, px + 64, y, 20, medal[x.rank - 1] || '#5c3a1a', 'right', null);
+    txt(x.name, px + 84, y, 20, '#3b1600', 'left', null);
+    txt(String(x.score), px + pw - 22, y, 20, '#3b1600', 'right', null);
+  });
+}
+// Was ist mit dieser Runde in der Bestenliste passiert?
+function roundStatus(r) {
+  if (!r || (r.status === 'noname' && HS.dialogOpen)) return null;
+  return {
+    tampered: ['MANIPULIERT – RUNDE NICHT GEWERTET', '#c1121f'],
+    noname: ['OHNE NICKNAME NICHT IN DER BESTENLISTE', '#c1121f'],
+    sending: ['WIRD EINGETRAGEN …', '#5c3a1a'],
+    later: ['OFFLINE – WIRD SPÄTER EINGETRAGEN', '#5c3a1a'],
+    rejected: ['VOM SERVER NICHT ANGENOMMEN', '#c1121f'],
+    done: [r.rank ? `DU BIST AUF PLATZ ${r.rank}!` : 'EINGETRAGEN!', '#1a7a3a'],
+  }[r.status] || null;
 }
 
 /* ---------------------------------------------------------------- Bestenliste */
