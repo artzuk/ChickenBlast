@@ -131,6 +131,8 @@ function endGame() {
   }
   HS.saveProgress(progress);
   HS.roundEnd(w.id, score, kills, tampered);
+  // noch kein Nickname: nach kurzem Blick aufs Ergebnis direkt fragen
+  if (HS.round && HS.round.status === 'noname') setTimeout(() => { if (G.state === 'over') HS.nameDialog(); }, 1200);
 }
 
 /* ---------------------------------------------------------------- Spawnen */
@@ -1750,9 +1752,7 @@ function drawOver() {
       button('NÄCHSTE WELT', W / 2 + 20, 500, 280, 70, () => startGame(G.world + 1));
     } else button('NOCHMAL', W / 2 - 160, 500, 320, 70, () => startGame(G.world));
     ghostButton('MENÜ', W / 2 - 220, 596, 180, 48, () => { G.state = 'menu'; });
-    const r = HS.round;
-    if (r && r.status === 'noname') ghostButton('EINTRAGEN', W / 2 - 20, 596, 240, 48, () => HS.nameDialog());
-    else ghostButton('BESTENLISTE', W / 2 - 20, 596, 240, 48, () => { G.hsTab = world().id; G.state = 'scores'; });
+    ghostButton('BESTENLISTE', W / 2 - 20, 596, 240, 48, () => { G.hsTab = world().id; G.state = 'scores'; });
   }
   drawRoundStatus(HS.round, 672);
 }
@@ -1761,7 +1761,7 @@ function drawRoundStatus(r, y) {
   if (!r) return;
   const S = {
     tampered: ['MANIPULIERT – RUNDE NICHT GEWERTET', '#ff5a5a'],
-    noname: ['WÄHLE EINEN NICKNAME FÜR DIE BESTENLISTE!', '#ffe14d'],
+    noname: ['OHNE NICKNAME NICHT IN DER BESTENLISTE', '#ffe14d'],
     sending: ['WIRD EINGETRAGEN …', '#fff8e0'],
     later: ['OFFLINE – WIRD SPÄTER EINGETRAGEN', '#ffe9a8'],
     rejected: ['VOM SERVER NICHT ANGENOMMEN', '#ff5a5a'],

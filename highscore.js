@@ -364,27 +364,20 @@ const HS = (() => {
     el.innerHTML = `<div class="box" role="dialog" aria-modal="true" aria-labelledby="hs-t">
       <h2 id="hs-t">DEIN NICKNAME</h2>
       <input type="text" maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" aria-label="Nickname">
-      <p class="hint">2–16 Zeichen, Emojis erlaubt. Der Name gilt für dieses Gerät und kann später nicht geändert werden.</p>
+      <p class="hint">2–16 Zeichen, Emojis erlaubt. Gilt für dieses Gerät, nicht änderbar.</p>
       <p class="err" aria-live="polite"></p>
-      <div class="row"><button type="button" class="alt" data-a="no">ABBRECHEN</button><button type="button" data-a="ok">SPEICHERN</button></div>
+      <div class="row"><button type="button" class="alt" data-a="no">ABBRECHEN</button><button type="button" data-a="ok">EINTRAGEN</button></div>
       <p class="legal">Nickname und Punkte werden bei Google Firebase gespeichert und öffentlich angezeigt. Geschützt durch reCAPTCHA – es gelten die
       <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Datenschutzerklärung</a> und
       <a href="https://policies.google.com/terms" target="_blank" rel="noopener">Nutzungsbedingungen</a> von Google.</p></div>`;
     document.body.appendChild(el);
     const inp = el.querySelector('input'), err = el.querySelector('.err');
     const ok = el.querySelector('[data-a=ok]'), no = el.querySelector('[data-a=no]');
-    let confirmFor = null;
     const close = res => { el.remove(); dlgOpen = false; done(res); };
-    inp.addEventListener('input', () => { confirmFor = null; ok.textContent = 'SPEICHERN'; err.textContent = ''; });
+    inp.addEventListener('input', () => { err.textContent = ''; });
     async function save() {
       const v = validateName(inp.value);
-      if (v.error) { err.textContent = v.error; confirmFor = null; ok.textContent = 'SPEICHERN'; return; }
-      if (confirmFor !== v.name) {   // zweiter Klick bestätigt – der Name ist endgültig
-        confirmFor = v.name; inp.value = v.name;
-        ok.textContent = 'JA, ENDGÜLTIG';
-        err.textContent = `„${v.name}“ für immer? Nochmal klicken zum Bestätigen.`;
-        return;
-      }
+      if (v.error) { err.textContent = v.error; return; }
       ok.disabled = no.disabled = inp.disabled = true;
       ok.textContent = 'SPEICHERE…'; err.textContent = '';
       myName = v.name; store.set('name', myName);
@@ -394,7 +387,7 @@ const HS = (() => {
             myName = null; profileOk = false;
             try { localStorage.removeItem('chickenblast_name'); } catch (e2) {}
             err.textContent = 'Dieser Name wurde abgelehnt. Bitte einen anderen wählen.';
-            ok.disabled = no.disabled = inp.disabled = false; ok.textContent = 'SPEICHERN'; confirmFor = null;
+            ok.disabled = no.disabled = inp.disabled = false; ok.textContent = 'EINTRAGEN';
             return;
           }
           // offline / Zeitüberschreitung: Profil wird beim nächsten Einreichen angelegt
